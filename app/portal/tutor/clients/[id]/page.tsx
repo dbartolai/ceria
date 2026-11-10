@@ -5,6 +5,7 @@ import { ActionForm } from "@/lib/tutor/action-form";
 import { Field, SettingsFields, TutorIntro } from "@/lib/tutor/ui";
 import { isUuid } from "@/lib/tutor/validation";
 import { linkGuardian, sendClientInvitation, unlinkGuardian, updateClient } from "../actions";
+import { CopySignInLink } from "../copy-sign-in-link";
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -47,6 +48,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           <section className="panel stack">
             <h2>Portal access</h2>
             <p className="muted">{client.auth_user_id ? "This client has signed in before." : "This client has yet to sign in."}</p>
+            <CopySignInLink key={id} clientId={id} />
             <ActionForm action={sendClientInvitation} label={client.auth_user_id ? "Send sign-in link" : "Send invitation"} secondary>
               <input type="hidden" name="id" value={id} />
             </ActionForm>

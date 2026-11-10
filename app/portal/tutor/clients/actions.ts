@@ -1,7 +1,7 @@
 "use server";
 
-import { invitePerson } from "@/lib/auth";
-import { check, choice, FormError, idField, required, settingsFromForm, tutorAction } from "@/lib/tutor/validation";
+import { generateSignInLink, invitePerson, requireRole } from "@/lib/auth";
+import { check, choice, FormError, idField, isUuid, required, settingsFromForm, tutorAction } from "@/lib/tutor/validation";
 
 export async function createClient(form: FormData) {
   return tutorAction(async (db) => {
@@ -39,6 +39,19 @@ export async function sendClientInvitation(form: FormData) {
     }
     return { message: "Sign-in email sent." };
   });
+}
+
+export async function createClientSignInLink(id: string): Promise<{ link: string } | { error: string }> {
+  const { db } = await requireRole("tutor");
+  if (typeof id !== "string" || !isUuid(id)) return { error: "Choose an existing client." };
+  const { data: client, error } = await db.from("people").select("email,auth_user_id").eq("id", id)
+    .in("role", ["student", "guardian"]).maybeSingle();
+  if (error || !client) return { error: "Choose an existing client." };
+  try {
+    return { link: await generateSignInLink(client.email, client.auth_user_id) };
+  } catch {
+    return { error: "Ceria could not create a sign-in link. Check the Supabase Auth setup or try again shortly." };
+  }
 }
 
 export async function linkGuardian(form: FormData) {
