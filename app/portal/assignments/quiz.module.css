@@ -1,0 +1,63 @@
+.practice {
+  width: min(100%, 47rem);
+  margin-inline: auto;
+}
+
+.progress {
+  width: 100%;
+  height: 0.3rem;
+  appearance: none;
+  border: 0;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: var(--border);
+  color: var(--primary);
+}
+
+.progress::-webkit-progress-bar { background: var(--border); }
+.progress::-webkit-progress-value { background: linear-gradient(90deg, var(--primary), var(--accent)); }
+.progress::-moz-progress-bar { background: linear-gradient(90deg, var(--primary), var(--accent)); }
+
+.question {
+  gap: clamp(1rem, 3vw, 2rem);
+  padding: clamp(1.15rem, 5vw, 3rem);
+}
+
+.question h2:focus { outline: none; }
+
+.choices {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  cursor: pointer;
+}
+
+.choice input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  accent-color: var(--primary);
+}
+
+.choice:hover, .choice:has(:checked) {
+  border-color: var(--primary);
+  background: var(--teal-wash);
+}
+
+.choice:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.choiceLetter { font-variant-numeric: tabular-nums; }
