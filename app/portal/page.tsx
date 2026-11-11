@@ -64,6 +64,7 @@ export default async function Portal() {
         </section>}
       </div>
       <aside className="stack-lg">
+        <Link className="panel resource-link" href="/portal/study-plans"><BookOpen size={21} aria-hidden /><div><h3>Study plans</h3><small className="muted">Focused practice and next steps from your tutor</small></div><ArrowRight size={16} aria-hidden /></Link>
         {student ? <>
           <section className="panel stack">
             <h2>Learning record</h2>

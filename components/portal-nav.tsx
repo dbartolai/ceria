@@ -19,12 +19,14 @@ const studentLinks = [
   ["/portal", "Overview", House],
   ["/portal/sessions", "Sessions", CalendarDays],
   ["/portal/assignments", "Practice", ClipboardList],
+  ["/portal/study-plans", "Study plans", BookOpen],
   ["/portal/materials", "Materials", BookOpen],
   ["/portal/progress", "Progress", LineChart],
 ] as const;
 
 const guardianLinks = [
   ["/portal", "Overview", House],
+  ["/portal/study-plans", "Study plans", BookOpen],
   ["/portal/sessions", "Sessions", CalendarDays],
   ["/portal/billing", "Billing", CreditCard],
 ] as const;

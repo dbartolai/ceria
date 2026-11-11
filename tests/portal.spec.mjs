@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
+import { startAiFixture } from "./ai-fixture.mjs";
+import { fileURLToPath } from "node:url";
+import { basename } from "node:path";
+import { writeFile } from "node:fs/promises";
 
 const mailpitUrl = process.env.TEST_MAILPIT_URL ?? "http://127.0.0.1:55324";
 const apiUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,6 +16,7 @@ const storageBucket = "materials";
 const fixture = {};
 const cleanup = [];
 let admin;
+let aiFixture;
 
 async function checked(operation, description) {
   const { data, error } = await operation;
@@ -100,6 +105,7 @@ async function tableIds(client, table, ids) {
 }
 
 test.beforeAll(async () => {
+  aiFixture = await startAiFixture();
   if (!["127.0.0.1", "localhost"].includes(new URL(mailpitUrl).hostname)) {
     throw new Error("Set TEST_MAILPIT_URL to the local mail inbox before running end-to-end tests.");
   }
@@ -195,6 +201,7 @@ test.afterAll(async () => {
       failures.push(error);
     }
   }
+  await aiFixture?.close();
   if (failures.length) throw new AggregateError(failures, "Fixture cleanup failed");
 });
 
@@ -614,4 +621,134 @@ test("guardians see linked sessions, approved recaps, and hosted billing", async
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.locator("body").evaluate((body) => body.scrollWidth)).toBeLessThanOrEqual(390);
   await page.screenshot({ path: testInfo.outputPath("guardian-billing-mobile.png"), fullPage: true });
+});
+
+test("session preparation becomes a private, reviewed study plan with scoped completion", async ({ page, browser }, testInfo) => {
+  const anonymous = await browser.newPage();
+  try { expect((await anonymous.request.post("/api/session-preparation", { data: {} })).status()).toBe(401); }
+  finally { await anonymous.close(); }
+  const { tutorDb, student, peer, guardian, group } = fixture;
+  const sessionId = await saveSession(tutorDb, group, "Study plan workflow", [student, peer], new Date().toISOString());
+  const material = await insert(tutorDb, "materials", { engagement_id: group.id, session_id: sessionId, title: "Exam review worksheet", body: "Exponent rules and logarithms." });
+  remove("materials", "id", material.id);
+  const path = `${group.id}/${randomUUID()}/worksheet.txt`;
+  await checked(tutorDb.storage.from(storageBucket).upload(path, new Blob(["Question 14c: solve a logarithm equation. Check the domain."], { type: "text/plain" })), "Upload AI worksheet");
+  cleanup.push(() => checked(admin.storage.from(storageBucket).remove([path]), "Clean AI worksheet"));
+  await checked(tutorDb.rpc("add_material_attachment", { p_material_id: material.id, p_storage_path: path, p_filename: "worksheet.txt", p_size_bytes: 70 }), "Register worksheet");
+  const privatePeerMaterial = await insert(tutorDb, "materials", { engagement_id: group.id, session_id: sessionId, student_id: peer.id, title: "Peer secret worksheet", body: "Never send peer information." });
+  remove("materials", "id", privatePeerMaterial.id);
+  await checked(tutorDb.from("session_notes").insert({ session_id: sessionId, student_id: peer.id, topics: "Never send peer notes." }), "Add peer notes");
+  await signInFixture(page, fixture.tutor);
+  await page.goto(`/portal/tutor/sessions/${sessionId}/prepare?student=${student.id}`);
+  await expect(page.getByLabel(/Peer secret worksheet/)).toHaveCount(0);
+  const before = aiFixture.requests.length;
+  const generationResponse = page.waitForResponse(response => response.url().endsWith("/api/session-preparation"));
+  await page.getByRole("button", { name: "Generate preparation", exact: true }).click();
+  const generated = await generationResponse;
+  expect(generated.status(), await generated.text()).toBe(200);
+  expect((await generated.json()).preparation.summary).toContain("exponent rules");
+  await expect(page.getByRole("textbox", { name: "Session outline", exact: true })).toHaveValue(/exponent rules/);
+  expect(aiFixture.requests.length).toBe(before + 1);
+  const sent = JSON.stringify(aiFixture.requests.at(-1));
+  expect(sent).toContain("Question 14c");
+  expect(sent).not.toContain("Never send peer");
+  expect(sent).not.toContain(student.email);
+  expect(aiFixture.requests.at(-1).store).toBe(false);
+  await page.getByRole("combobox", { name: "Student confidence", exact: true }).selectOption("low");
+  await page.getByRole("combobox", { name: "Observed understanding", exact: true }).selectOption("with-help");
+  await page.getByRole("textbox", { name: "Observation notes", exact: true }).fill("Needed a prompt to check the log domain.");
+  await page.getByRole("button", { name: "Save preparation", exact: true }).click();
+  await expect(page.getByText("Preparation and observations saved.", { exact: true })).toBeVisible();
+  const [studentDb, peerDb, guardianDb] = await Promise.all([asPerson(student), asPerson(peer), asPerson(guardian)]);
+  for (const client of [studentDb, peerDb, guardianDb]) {
+    expect(await checked(client.from("session_preparations").select("session_id").eq("session_id", sessionId), "Preparation privacy")).toEqual([]);
+  }
+  await page.getByRole("button", { name: "Generate study plan", exact: true }).click();
+  await expect(page.getByLabel("Plan title", { exact: true })).toHaveValue("Focused logarithm practice");
+  expect(JSON.stringify(aiFixture.requests.at(-1))).toContain("Needed a prompt to check the log domain.");
+  await page.getByRole("button", { name: "Save study plan draft", exact: true }).click();
+  await expect(page.getByText("Study plan draft saved.", { exact: true })).toBeVisible();
+  const saved = await checked(tutorDb.from("study_plans").select("id,study_plan_items(*)").eq("session_id", sessionId).eq("student_id", student.id).single(), "Read study plan draft");
+  expect(await tableIds(studentDb, "study_plans", [saved.id])).toEqual([]);
+  const taskId = saved.study_plan_items[0].id;
+  expect((await studentDb.rpc("complete_study_plan_item", { p_id: taskId, p_completed: true })).error).toBeTruthy();
+  await page.getByRole("textbox", { name: "Plan summary", exact: true }).fill("A reviewed plan for domain checks.");
+  await expect(page.getByRole("button", { name: "Publish study plan", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Save study plan draft", exact: true }).click();
+  await page.getByRole("button", { name: "Publish study plan", exact: true }).click();
+  await expect(page.getByText("Study plan published to the student and linked guardians.", { exact: true })).toBeVisible();
+  expect(await tableIds(studentDb, "study_plans", [saved.id])).toEqual([saved.id]);
+  expect(await tableIds(guardianDb, "study_plans", [saved.id])).toEqual([saved.id]);
+  expect(await tableIds(peerDb, "study_plans", [saved.id])).toEqual([]);
+  expect(await tableIds(peerDb, "study_plan_items", [taskId])).toEqual([]);
+  expect((await peerDb.rpc("complete_study_plan_item", { p_id: taskId, p_completed: true })).error).toBeTruthy();
+  expect((await guardianDb.rpc("complete_study_plan_item", { p_id: taskId, p_completed: true })).error).toBeTruthy();
+  expect(await checked(studentDb.from("study_plan_items").update({ title: "Tampered" }).eq("id", taskId).select("id"), "Student content protection")).toEqual([]);
+  const studentPage = await browser.newPage();
+  try {
+    await signInFixture(studentPage, student);
+    await studentPage.goto("/portal/study-plans");
+    await studentPage.getByRole("button", { name: "Mark complete", exact: true }).click();
+    await expect(studentPage.getByText("1 of 1 tasks completed", { exact: true })).toBeVisible();
+    await studentPage.screenshot({ path: testInfo.outputPath("student-study-plan.png"), fullPage: true });
+    const forbidden = await studentPage.request.post("/api/session-preparation", { data: { sessionId, studentId: student.id, kind: "plan", materialIds: [] } });
+    expect(forbidden.status()).toBe(403);
+  } finally { await studentPage.close(); }
+  // Published content and completion cannot be changed through the draft RPC.
+  expect((await tutorDb.rpc("save_study_plan", { p_session_id: sessionId, p_student_id: student.id, p_title: "Blocked", p_summary: "", p_items: [] })).error).toBeTruthy();
+  const duplicatePublish = await tutorDb.rpc("publish_study_plan", { p_id: saved.id });
+  expect(duplicatePublish.error).toBeNull();
+  const notifications = await checked(tutorDb.from("notifications").select("id").eq("recipient_id", student.id).eq("title", "Study plan ready"), "One publication notification");
+  expect(notifications.length).toBe(1);
+  await page.screenshot({ path: testInfo.outputPath("tutor-preparation.png"), fullPage: true });
+  const guardianPage = await browser.newPage();
+  try {
+    await signInFixture(guardianPage, guardian);
+    await guardianPage.goto("/portal/study-plans");
+    await expect(guardianPage.getByRole("heading", { name: "Focused logarithm practice", exact: true })).toBeVisible();
+    await expect(guardianPage.getByText("1 of 1 tasks completed", { exact: true })).toBeVisible();
+    await expect(guardianPage.getByRole("button", { name: "Mark incomplete", exact: true })).toHaveCount(0);
+    await expect(guardianPage.getByText("Needed a prompt to check the log domain.", { exact: true })).toHaveCount(0);
+    await guardianPage.screenshot({ path: testInfo.outputPath("guardian-study-plan.png"), fullPage: true });
+  } finally { await guardianPage.close(); }
+  const crossSite = await page.request.post("/api/session-preparation", { headers: { origin: "https://unrelated.example" }, data: {} });
+  expect(crossSite.status()).toBe(403);
+  const unauthorizedMaterial = await page.request.post("/api/session-preparation", { headers: { origin: "http://127.0.0.1:3100" }, data: { sessionId, studentId: student.id, kind: "preparation", materialIds: [privatePeerMaterial.id] } });
+  expect(unauthorizedMaterial.status()).toBe(400);
+  const again = await page.request.post("/api/session-preparation", { headers: { origin: "http://127.0.0.1:3100" }, data: { sessionId, studentId: student.id, kind: "preparation", materialIds: [material.id] } });
+  expect((await again.json()).error).toContain("two minutes");
+  await checked(tutorDb.from("study_plans").update({ published_at: null }).eq("id", saved.id), "Return plan to draft");
+  await checked(tutorDb.rpc("save_study_plan", { p_session_id: sessionId, p_student_id: student.id, p_title: "Revised plan", p_summary: "", p_items: saved.study_plan_items }), "Edit existing task");
+  const retained = await checked(tutorDb.from("study_plan_items").select("completed_at").eq("id", taskId).single(), "Read retained completion");
+  expect(retained.completed_at).toBeTruthy();
+});
+
+test("AI credit failures preserve drafts and HEIC photos upload as JPEG", async ({ page }, testInfo) => {
+  const { tutorDb, group, student } = fixture;
+  const sessionId = await saveSession(tutorDb, group, "Generation error handling", [student], new Date().toISOString());
+  await signInFixture(page, fixture.tutor);
+  await page.goto(`/portal/tutor/sessions/${sessionId}/prepare`);
+  await page.getByRole("textbox", { name: "Session outline", exact: true }).fill("Keep this preparation when generation fails.");
+  aiFixture.mode = "quota";
+  try {
+    await page.getByRole("button", { name: "Generate study plan", exact: true }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "credit limit" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Session outline", exact: true })).toHaveValue("Keep this preparation when generation fails.");
+  } finally { aiFixture.mode = "success"; }
+  const material = await insert(tutorDb, "materials", { engagement_id: group.id, title: "HEIC support", body: "A converted photo." });
+  remove("materials", "id", material.id);
+  await page.goto(`/portal/tutor/materials/${material.id}`);
+  const heicPath = process.env.TEST_HEIC_PATH || fileURLToPath(new URL("./fixtures/sample.heic", import.meta.url));
+  await page.getByLabel("Add files", { exact: true }).setInputFiles(heicPath);
+  await page.getByRole("button", { name: "Upload files", exact: true }).click();
+  await expect(page.getByText("1 file added.", { exact: true })).toBeVisible({ timeout: 30000 });
+  const [file] = await checked(tutorDb.from("material_attachments").select("*").eq("material_id", material.id), "Read converted attachment");
+  cleanup.push(() => checked(admin.storage.from(storageBucket).remove([file.storage_path]), "Clean converted photo"));
+  expect(file.filename).toBe(basename(heicPath).replace(/\.(heic|heif)$/i, ".jpg"));
+  const blob = await checked(tutorDb.storage.from(storageBucket).download(file.storage_path), "Read converted JPEG");
+  expect(blob.type).toBe("image/jpeg");
+  const jpeg = new Uint8Array(await blob.arrayBuffer());
+  expect([...jpeg.slice(0, 2)]).toEqual([255, 216]);
+  await writeFile(testInfo.outputPath("heic-converted.jpg"), jpeg);
+  await page.screenshot({ path: testInfo.outputPath("heic-upload.png"), fullPage: true });
 });

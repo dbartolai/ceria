@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type FormEvent } from "react";
+import { prepareMaterialFile } from "@/lib/materials/prepare-file";
 import { uploadMaterialFile } from "./actions";
 
 type PendingFile = { id: string; file: File };
@@ -23,16 +24,19 @@ export function FileUploader({ materialId }: { materialId: string }) {
         const form = new FormData();
         form.set("material_id", materialId);
         form.set("upload_id", item.id);
-        form.set("attachment", item.file);
         try {
+          setFeedback({ message: `Preparing ${item.file.name}…` });
+          const ready = await prepareMaterialFile(item.file);
+          setFiles(remaining => remaining.map(entry => entry.id === item.id ? { ...entry, file: ready } : entry));
+          form.set("attachment", ready);
           const result = await uploadMaterialFile(form);
           if ("error" in result) {
             setFeedback({ error: `${item.file.name}: ${result.error}` });
             router.refresh();
             return;
           }
-        } catch {
-          setFeedback({ error: `${item.file.name} could not be uploaded. Try again to continue.` });
+        } catch (error) {
+          setFeedback({ error: `${item.file.name}: ${error instanceof Error ? error.message : "The file could not be uploaded. Try again to continue."}` });
           router.refresh();
           return;
         }
@@ -49,13 +53,13 @@ export function FileUploader({ materialId }: { materialId: string }) {
     <form className="stack" onSubmit={submit}>
       <label>
         Add files
-        <input ref={input} type="file" multiple disabled={pending} accept=".pdf,.txt,.png,.jpg,.jpeg,.webp"
+        <input ref={input} type="file" multiple disabled={pending} accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.heic,.heif"
           onChange={(event) => {
             setFeedback(undefined);
             setFiles(Array.from(event.target.files ?? []).map((file) => ({ id: crypto.randomUUID(), file })));
           }} />
       </label>
-      <p className="muted text-sm">PDF, text, PNG, JPEG, or WebP. Each file can be up to 4 MB.</p>
+      <p className="muted text-sm">PDF, text, PNG, JPEG, WebP, or HEIC/HEIF. HEIC photos up to 20 MB convert to JPEG in your browser. Uploaded files can be up to 4 MB each.</p>
       {!!files.length && <ul className="muted text-sm">{files.map(({ id, file }) => <li key={id}>{file.name}</li>)}</ul>}
       <div><button className="button secondary" type="submit" disabled={pending || !files.length}>
         {pending ? "Uploading…" : "Upload files"}

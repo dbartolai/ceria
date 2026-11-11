@@ -10,12 +10,14 @@ export function ActionForm({
   label,
   secondary = false,
   reset = false,
+  disabled = false,
 }: {
   action: (form: FormData) => Promise<ActionResult>;
   children?: ReactNode;
   label: string;
   secondary?: boolean;
   reset?: boolean;
+  disabled?: boolean;
 }) {
   const router = useRouter();
   const [result, setResult] = useState<ActionResult>();
@@ -23,7 +25,7 @@ export function ActionForm({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || disabled) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     setResult(undefined);
@@ -45,7 +47,7 @@ export function ActionForm({
     <form method="post" className="stack" onSubmit={submit}>
       {children}
       <div>
-        <button className={secondary ? "button secondary" : "button"} disabled={pending} type="submit">
+        <button className={secondary ? "button secondary" : "button"} disabled={pending || disabled} type="submit">
           {pending ? "Working…" : label}
         </button>
         {result && ("error" in result ? (

@@ -26,6 +26,7 @@ export default defineConfig({
   webServer: {
     command: "npm run dev -- --hostname 127.0.0.1 --port 3100",
     cwd: projectDirectory,
+    env: { OPENAI_API_KEY: "local-test-key", OPENAI_BASE_URL: "http://127.0.0.1:55325/v1", OPENAI_MODEL: "gpt-6.1-sol" },
     url: `${appUrl}/login`,
     timeout: 120_000,
   },

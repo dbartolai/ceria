@@ -74,6 +74,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     <div className="stack">
       <TutorIntro title={session.data.title} description={`${formatDateTime(session.data.starts_at)} · ${session.data.duration_minutes} min · ${session.data.status}`} back={{ href: "/portal/tutor/sessions", label: "Sessions" }}>
         <div className="flex flex-wrap gap-2">
+          <Link className="button" href={`/portal/tutor/sessions/${id}/prepare`}>Prepare session & study plan</Link>
           {session.data.status !== "cancelled" && <a className="button secondary" href={`/portal/calendar/${id}`}>Download calendar invite</a>}
           <Link className="button secondary" href={`/portal/tutor/quizzes/new?session=${id}`}>Create a practice quiz</Link>
           <Link className="button secondary" href={`/portal/tutor/materials?engagement=${engagementId}&session=${id}`}>Add learning material</Link>

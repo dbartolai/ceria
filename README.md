@@ -33,14 +33,23 @@ Open the [local portal](http://127.0.0.1:3100/portal). Supabase Studio runs on p
 ## Tutor workflow
 
 - Create an engagement, enroll its students, then schedule a session with the relevant participants. Sessions may be entered individually for recurring engagements. Download an ICS invitation to add it to a calendar or send it through a calendar app.
+- Open **Prepare session & study plan** on a session. Select a student and materials, then generate or write a preparation. Record the student’s confidence separately from observed understanding. Draft a study plan, review its tasks and dates, save it, then publish. Students can mark tasks complete; linked guardians can view the plan. Preparation and observations remain tutor-only.
 - On the session page, record private lesson notes. Draft separate student summaries and guardian recaps, including individual versions when needed. Published recaps, materials, and assignments send in-app notifications. Linked guardians receive notifications for published guardian recaps.
 - Use **Quizzes** to write questions, reuse questions from saved drafts, or import quiz JSON. Review the draft and publish to selected students or the whole engagement. Draft changes leave published assignments and prior results intact.
-- Use **Materials** to share text, worked examples, and private files. Save a material draft, then select multiple files under **Files**. Files upload individually and can be removed while the material is a draft. Each file can be up to 4 MB.
+- Use **Materials** to share text, worked examples, and private files. Save a material draft, then select multiple files under **Files**. Files upload individually and can be removed while the material is a draft. Each uploaded file can be up to 4 MB. HEIC/HEIF photos up to 20 MB are converted to JPEG in the browser before upload; larger converted images are resized to fit. The original photo stays on your device.
 - Quizzes and materials are available to all engagements. Use the parts needed for each lesson. Existing recorded goals and milestones remain in student progress alongside completed work, reviewed scores, and published topics.
 
 ### Stripe billing
 
 Create invoices or payment links in the Stripe Dashboard, then enter their URLs and status in ceria’s **Billing** screen. Update ceria’s invoice status when the Stripe record changes. The guardian’s payment-method link should be the persistent Stripe Customer Portal login link, which authenticates the customer by email. Use a Stripe sandbox to test the hosted pages before adding live links. [Hosted invoices](https://docs.stripe.com/invoicing/hosted-invoice-page) · [Payment Links](https://docs.stripe.com/payment-links) · [Customer Portal login](https://docs.stripe.com/customer-management/activate-no-code-customer-portal)
+
+## AI session preparation
+
+Set `OPENAI_API_KEY` in your ignored `.env.local` for development and as a Vercel Production Secret for the hosted app. `OPENAI_MODEL` defaults to `gpt-6.1-sol`; use a Responses API model supporting image inputs and structured outputs. API billing uses the key's OpenAI project, including any eligible claimed credits. No auto-recharge or billing settings are configured by the app.
+
+Generation is tutor-only. It sends the selected student's shared/individual session notes and selected materials to OpenAI with `store: false`. Other participants' individual materials and notes are excluded. Review source files for personal information before generating. A request supports up to 12 files and 25 MB total. Each generation type has a two-minute per-session cooldown to prevent repeated billed requests. Generation errors preserve saved work; manual preparation and plans work without an API key.
+
+Draft plans are private. Publishing shares a plan with its student and linked guardians and creates in-app notifications. Students can update completion only. To revise a published plan, return it to draft; existing task IDs retain their completion state. Removing a task removes its completion record.
 
 ## Hosted Supabase and Vercel
 
@@ -60,4 +69,4 @@ npm run test:e2e
 npx supabase@3.1.0 db lint --schema public,private --fail-on error
 ```
 
-The browser suite requires the local Supabase stack and Mailpit and starts Next.js on port 3100. It uses synthetic accounts and a mix of browser and Data API assertions to check one-time email links, group isolation, quiz authoring and submission, tutor review, and guardian access. Use `npx supabase@3.1.0 db reset` to rebuild the disposable local database after migration edits.
+The browser suite requires local Supabase and Mailpit and starts Next.js on port 3100. It uses synthetic accounts and a local OpenAI HTTP fixture, with no billed AI calls. Browser and Data API assertions cover sign-in links, group isolation, quiz submissions and tutor review, private preparation, plan publication and completion, guardian access, API failures, and HEIC conversion. Use `npx supabase@3.1.0 db reset` to rebuild the disposable local database after migration edits.
