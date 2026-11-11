@@ -245,6 +245,78 @@ test("tutor invites a student and their email link works once", async ({ page, b
   }
 });
 
+test("tutor copies one-time links for a new student and a returning guardian", async ({ page, context, browser }, testInfo) => {
+  const student = await insert(fixture.tutorDb, "people", {
+    role: "student", name: "Avery Test", email: syntheticEmail("manual-invite"),
+  });
+  remove("people", "id", student.id);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await signInFixture(page, fixture.tutor);
+  await page.goto(`/portal/tutor/clients/${student.id}`);
+
+  async function copyLink(type) {
+    const button = page.getByRole("button", { name: "Copy sign-in link" });
+    await expect(async () => {
+      await button.click({ timeout: 1000 });
+      await expect(page.getByText("Sign-in link copied.", { exact: false })).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 8000 });
+    const link = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+    expect(link.origin).toBe("http://127.0.0.1:3100");
+    expect(link.pathname).toBe("/auth/confirm");
+    expect(link.searchParams.get("type")).toBe(type);
+    return link.pathname + link.search;
+  }
+
+  const invite = await copyLink("invite");
+  await page.locator("section").filter({ has: page.getByRole("heading", { name: "Portal access" }) })
+    .screenshot({ path: testInfo.outputPath("copy-sign-in-link.png") });
+  const mailSearch = new URL("/view/latest.html", mailpitUrl);
+  mailSearch.searchParams.set("query", `to:${student.email}`);
+  const message = await fetch(mailSearch);
+  expect((await message.text()).includes("/auth/confirm?")).toBe(false);
+
+  const studentPage = await browser.newPage();
+  try {
+    await studentPage.goto(invite);
+    await expect(studentPage.getByRole("button", { name: "Continue to portal" })).toBeVisible();
+    await continueToPortal(studentPage, invite);
+    await expect(studentPage.getByRole("heading", { name: "Your learning desk" })).toBeVisible();
+    const { auth_user_id } = await checked(admin.from("people").select("auth_user_id").eq("id", student.id).single(), "Read manually invited client");
+    expect(auth_user_id).toBeTruthy();
+    cleanup.push(() => checked(admin.auth.admin.deleteUser(auth_user_id), "Remove manually invited user"));
+    await studentPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(studentPage).toHaveURL(/\/login$/);
+    await studentPage.goto(invite);
+    await studentPage.getByRole("button", { name: "Continue to portal" }).click();
+    await expect(studentPage).toHaveURL(/\/login\?state=expired$/);
+  } finally {
+    await studentPage.close();
+  }
+
+  await page.goto(`/portal/tutor/clients/${fixture.guardian.id}`);
+  const signIn = await copyLink("magiclink");
+  const guardianPage = await browser.newPage();
+  try {
+    await continueToPortal(guardianPage, signIn);
+    await expect(guardianPage.getByRole("heading", { name: "Family portal" })).toBeVisible();
+    await guardianPage.goto(`/portal/tutor/clients/${student.id}`);
+    await expect(guardianPage).toHaveURL(/\/portal$/);
+    await expect(guardianPage.getByRole("button", { name: "Copy sign-in link" })).toHaveCount(0);
+  } finally {
+    await guardianPage.close();
+  }
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.clipboard, "writeText", {
+      value: async () => { throw new DOMException("Clipboard blocked", "NotAllowedError"); },
+    });
+  });
+  await page.getByRole("button", { name: "Copy sign-in link" }).click();
+  const fallback = page.getByRole("textbox", { name: "Copy this one-time sign-in link" });
+  await expect(fallback).toBeVisible();
+  expect(new URL(await fallback.inputValue()).searchParams.get("type")).toBe("magiclink");
+});
+
 test("group sessions, recaps, and files follow roster and publication rules", async () => {
   const { tutorDb, student, peer, outsider, group, groupSession, individualSession, recaps, shared, private: personal, draft } = fixture;
   const [studentDb, peerDb, outsiderDb] = await Promise.all([asPerson(student), asPerson(peer), asPerson(outsider)]);
