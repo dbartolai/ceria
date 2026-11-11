@@ -1,8 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { PromptPanel } from '@/lib/ai/prompt-panel';
-import { importQuiz, quizPrompt } from '@/lib/quizzes/content';
+import { importQuiz } from '@/lib/quizzes/content';
 import { questionKinds, questionLabels, type Question, type QuestionKind, type QuizDraft } from '@/lib/quizzes/types';
 import { saveQuiz } from './actions';
 
@@ -17,18 +16,16 @@ function blankQuestion(): EditorQuestion {
   return toEditor({ kind: 'multiple-choice', prompt: '', topic: '', choices: ['', ''], answer: '', explanation: '', tolerance: 0 }, crypto.randomUUID());
 }
 
-export function QuizEditor({ id, sessionId, initial, context, library }: {
+export function QuizEditor({ id, sessionId, initial, library }: {
   id: string | null;
   sessionId: string | null;
   initial: QuizDraft;
-  context: string;
   library: ReusableQuiz[];
 }) {
   const [state, action, pending] = useActionState(saveQuiz.bind(null, id, sessionId), {});
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
   const [questions, setQuestions] = useState(() => initial.questions.map((question, index) => toEditor(question, String(index))));
-  const [academicContext, setAcademicContext] = useState(context);
   const [importText, setImportText] = useState('');
   const [importStatus, setImportStatus] = useState<{ error?: string; success?: string }>({});
   const [reuse, setReuse] = useState('');
@@ -77,14 +74,8 @@ export function QuizEditor({ id, sessionId, initial, context, library }: {
   return (
     <div className="stack">
       <details className="panel">
-        <summary>Generate a prompt or import a quiz</summary>
+        <summary>Import quiz JSON</summary>
         <div className="stack mt-4">
-          <label>
-            Academic context
-            <textarea rows={4} value={academicContext} onChange={(event) => setAcademicContext(event.target.value)} placeholder="Topics, exam format, and preferred question types" />
-          </label>
-          <p className="muted">Review this context for identifying details before copying it into ChatGPT.</p>
-          <PromptPanel prompt={quizPrompt(academicContext)} />
           <label>
             Paste quiz JSON
             <textarea value={importText} onChange={(event) => setImportText(event.target.value)} rows={5} />

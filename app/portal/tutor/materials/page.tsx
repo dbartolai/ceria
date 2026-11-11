@@ -8,7 +8,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const { db } = await requireRole("tutor");
   const results = await Promise.all([
-    db.from("engagements").select("id,title,settings").order("title"),
+    db.from("engagements").select("id,title").order("title"),
     db.from("materials").select("id,title,published_at,engagement_id").order("title"),
   ]);
   for (const result of results) if (result.error) throw result.error;
@@ -17,7 +17,6 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
   const titles = new Map(engagements.data?.map((item) => [item.id, item.title]));
   let students: { id: string; name: string }[] = [];
   let sessions: { id: string; label: string; participants: string[] }[] = [];
-  let context = "";
 
   if (selected) {
     const detail = await Promise.all([
@@ -35,23 +34,12 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
       label: `${session.title} · ${formatDateTime(session.starts_at)}`,
       participants: roster.data?.filter((row) => row.session_id === session.id).map((row) => row.student_id) ?? [],
     })) ?? [];
-    const related = sessions.find((session) => session.id === params.session);
-    if (related) {
-      const notes = await db.from("session_notes").select("topics,next_steps").eq("session_id", related.id)
-        .is("student_id", null).maybeSingle();
-      if (notes.error) throw notes.error;
-      context = [
-        notes.data?.topics && `Topics covered: ${notes.data.topics}`,
-        notes.data?.next_steps && `Next steps: ${notes.data.next_steps}`,
-      ].filter(Boolean).join("\n");
-    }
-    if (selected.settings?.testPrep) context += `\nTest preparation: ${selected.settings.testPrep}`;
   }
 
   return (
     <div className="stack">
       <TutorIntro title="Learning materials" description="Draft lesson plans and handouts, then share approved materials with students." />
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.25fr]">
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_1.25fr]">
         <section className="panel stack self-start">
           <h2>Material library</h2>
           {!materials.data?.length && <p className="muted">No learning materials yet.</p>}
@@ -72,7 +60,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
               <Link className="muted text-sm" href="/portal/tutor/materials">Change engagement</Link>
             </div>
             <MaterialForm key={`${selected.id}-${params.session ?? ""}`} engagementId={selected.id} students={students} sessions={sessions}
-              sessionId={sessions.find((item) => item.id === params.session)?.id} context={context.trim()} />
+              sessionId={sessions.find((item) => item.id === params.session)?.id} />
           </> : engagements.data?.length ? (
             <form action="/portal/tutor/materials" className="stack">
               <label htmlFor="material-engagement">Engagement</label>

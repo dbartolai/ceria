@@ -208,7 +208,7 @@ test("tutor invites a student and their email link works once", async ({ page, b
   const inviteeEmail = syntheticEmail("invitee");
   remove("people", "email", inviteeEmail);
   await page.getByLabel("Name", { exact: true }).fill("Nico Test");
-  await page.getByLabel("Email", { exact: true }).fill(inviteeEmail);
+  await page.getByLabel("Email (optional)", { exact: true }).fill(inviteeEmail);
   await page.getByRole("button", { name: "Create client" }).click();
   await expect(page.getByRole("heading", { name: "Nico Test" })).toBeVisible();
   await page.getByRole("button", { name: "Send invitation" }).click();
@@ -317,6 +317,95 @@ test("tutor copies one-time links for a new student and a returning guardian", a
   expect(new URL(await fallback.inputValue()).searchParams.get("type")).toBe("magiclink");
 });
 
+test("clients without email use static profiles and explicit editing", async ({ page }, testInfo) => {
+  await signInFixture(page, fixture.tutor);
+  await page.goto("/portal/tutor/clients");
+  await page.screenshot({ path: testInfo.outputPath("client-directory.png"), fullPage: true, caret: "initial" });
+  await page.getByLabel("Name", { exact: true }).fill("Email-free student");
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page.getByRole("heading", { name: "Email-free student", exact: true })).toBeVisible();
+  const clientId = new URL(page.url()).pathname.split("/").at(-1);
+  remove("people", "id", clientId);
+  const profile = await checked(admin.from("people").select("email").eq("id", clientId).single(), "Read client without email");
+  expect(profile.email).toBeNull();
+  await expect(page.getByRole("button", { name: "Save profile" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Copy sign-in link" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Add email", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save profile" })).toBeVisible();
+  await page.getByLabel("Name", { exact: true }).fill("Email-free student updated");
+  const email = syntheticEmail("optional");
+  await page.getByLabel("Email (optional)", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page).toHaveURL((url) => !url.search);
+  await expect(page.getByRole("heading", { name: "Email-free student updated", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy sign-in link" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save profile" })).toHaveCount(0);
+  await expect(page.getByText("Use default", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("static-client-profile.png"), fullPage: true });
+
+  await page.goto(`/portal/tutor/engagements/${fixture.group.id}`);
+  await expect(page.getByRole("button", { name: "Save engagement" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Edit engagement", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save engagement" })).toBeVisible();
+  await expect(page.getByText("Use default", { exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save engagement" })).toHaveCount(0);
+});
+
+test("multiple material files upload separately and keep individual access private", async ({ page, browser }, testInfo) => {
+  const { tutorDb, student, peer, group } = fixture;
+  const material = await insert(tutorDb, "materials", {
+    engagement_id: group.id, student_id: student.id, title: "Multi-file practice", body: "",
+  });
+  remove("materials", "id", material.id);
+  const { error: emptyPublishError } = await tutorDb.rpc("publish_material", { p_id: material.id });
+  expect(emptyPublishError?.message).toContain("Add material text or a file");
+  await signInFixture(page, fixture.tutor);
+  await page.goto(`/portal/tutor/materials/${material.id}`);
+  await page.getByLabel("Add files", { exact: true }).setInputFiles([
+    { name: "notes-one.txt", mimeType: "text/plain", buffer: Buffer.alloc(2_500_000, "a") },
+    { name: "notes-two.txt", mimeType: "text/plain", buffer: Buffer.alloc(2_500_000, "b") },
+  ]);
+  await page.getByRole("button", { name: "Upload files", exact: true }).click();
+  await expect(page.getByText("2 files added.", { exact: true })).toBeVisible({ timeout: 25000 });
+  const files = await checked(tutorDb.from("material_attachments").select("*").eq("material_id", material.id).order("filename"), "Read multiple uploaded files");
+  expect(files.map(({ filename }) => filename)).toEqual(["notes-one.txt", "notes-two.txt"]);
+  cleanup.push(() => checked(admin.storage.from(storageBucket).remove(files.map(({ storage_path }) => storage_path)), "Remove multi-file storage objects"));
+  const repeated = await checked(tutorDb.rpc("add_material_attachment", {
+    p_material_id: material.id, p_storage_path: files[0].storage_path,
+    p_filename: files[0].filename, p_size_bytes: files[0].size_bytes,
+  }), "Retry attachment registration");
+  expect(repeated).toBe(files[0].id);
+
+  await page.getByRole("button", { name: "Publish material", exact: true }).click();
+  await expect(page.getByText("Material published.", { exact: true })).toBeVisible();
+  const [studentDb, peerDb] = await Promise.all([asPerson(student), asPerson(peer)]);
+  expect(await checked(peerDb.from("material_attachments").select("id").eq("material_id", material.id), "Check peer attachment privacy")).toEqual([]);
+  const { error: privateFileError } = await peerDb.storage.from(storageBucket).createSignedUrl(files[0].storage_path, 60);
+  expect(privateFileError).toBeTruthy();
+  const { error: publishedRemoval } = await tutorDb.rpc("remove_material_attachment", { p_id: files[0].id });
+  expect(publishedRemoval).toBeTruthy();
+  const studentPage = await browser.newPage();
+  try {
+    await signInFixture(studentPage, student);
+    await studentPage.goto("/portal/materials");
+    const links = studentPage.getByRole("link", { name: /notes-(one|two)\.txt/ });
+    await expect(links).toHaveCount(2);
+    const download = await studentPage.request.get(await links.first().getAttribute("href"));
+    expect(download.status()).toBe(200);
+    expect((await download.body()).length).toBe(2_500_000);
+    await studentPage.screenshot({ path: testInfo.outputPath("multiple-material-files.png"), fullPage: true });
+  } finally {
+    await studentPage.close();
+  }
+  expect((await checked(studentDb.from("material_attachments").select("id").eq("material_id", material.id), "Read student attachment rows")).length).toBe(2);
+
+  await page.getByRole("button", { name: "Return to draft", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Remove file", exact: true })).toHaveCount(2);
+  await page.getByRole("button", { name: "Remove file", exact: true }).first().click();
+  await expect(page.getByRole("button", { name: "Remove file", exact: true })).toHaveCount(1);
+});
+
 test("group sessions, recaps, and files follow roster and publication rules", async () => {
   const { tutorDb, student, peer, outsider, group, groupSession, individualSession, recaps, shared, private: personal, draft } = fixture;
   const [studentDb, peerDb, outsiderDb] = await Promise.all([asPerson(student), asPerson(peer), asPerson(outsider)]);
@@ -375,7 +464,7 @@ async function publishGroupQuiz(browser, tutorDb, group) {
   try {
     await signInFixture(tutorPage, fixture.tutor);
     await tutorPage.goto("/portal/tutor/quizzes/new");
-    await tutorPage.getByText("Generate a prompt or import a quiz").click();
+    await tutorPage.getByText("Import quiz JSON").click();
     const importField = tutorPage.getByLabel("Paste quiz JSON");
     await importField.fill(JSON.stringify({ title: "" }));
     await tutorPage.getByRole("button", { name: "Load draft" }).click();
@@ -420,7 +509,7 @@ test("a group quiz can be submitted and reviewed without sharing answers with pe
   expect(await tableIds(peerDb, "assignments", [individualAssignmentId])).toEqual([]);
   await checked(tutorDb.from("engagement_students").update({ settings: { quizzes: false } })
     .eq("engagement_id", group.id).eq("student_id", peer.id), "Disable quiz access for one participant");
-  expect(await tableIds(peerDb, "assignments", [assignmentId])).toEqual([]);
+  expect(await tableIds(peerDb, "assignments", [assignmentId])).toEqual([assignmentId]);
   await checked(tutorDb.from("engagement_students").update({ settings: {} })
     .eq("engagement_id", group.id).eq("student_id", peer.id), "Restore default quiz access");
   expect(await tableIds(peerDb, "assignments", [assignmentId])).toEqual([assignmentId]);

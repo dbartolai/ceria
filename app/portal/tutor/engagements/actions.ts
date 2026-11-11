@@ -1,7 +1,7 @@
 "use server";
 
 import { engagementKinds } from "@/lib/tutor/fields";
-import { check, choice, idField, optionalId, requireClient, required, settingsFromForm, tutorAction, value } from "@/lib/tutor/validation";
+import { check, choice, idField, optionalId, requireClient, required, tutorAction, value } from "@/lib/tutor/validation";
 
 export async function saveEngagement(form: FormData) {
   return tutorAction(async (db) => {
@@ -10,12 +10,11 @@ export async function saveEngagement(form: FormData) {
       title: required(form, "title", "an engagement title", 120),
       kind: choice(form, "kind", engagementKinds),
       description: value(form, "description"),
-      settings: settingsFromForm(form),
     };
     if (id) {
       const { error } = await db.from("engagements").update(engagement).eq("id", id).select("id").single();
       check(error, "The engagement could not be updated.");
-      return { message: "Engagement saved." };
+      return { message: "Engagement saved.", href: `/portal/tutor/engagements/${id}` };
     }
     const { data, error } = await db.from("engagements").insert(engagement).select("id").single();
     check(error, "The engagement could not be created.");
@@ -32,17 +31,6 @@ export async function addEnrollment(form: FormData) {
       { onConflict: "engagement_id,student_id", ignoreDuplicates: true });
     check(error, "The student could not be enrolled.");
     return { message: "Student enrolled." };
-  });
-}
-
-export async function updateEnrollment(form: FormData) {
-  return tutorAction(async (db) => {
-    const engagementId = idField(form, "engagement_id");
-    const studentId = idField(form, "student_id");
-    const { error } = await db.from("engagement_students").update({ settings: settingsFromForm(form) })
-      .eq("engagement_id", engagementId).eq("student_id", studentId).select("student_id").single();
-    check(error, "The student preferences could not be saved.");
-    return { message: "Student preferences saved." };
   });
 }
 

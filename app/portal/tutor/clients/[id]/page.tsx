@@ -2,16 +2,20 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { ActionForm } from "@/lib/tutor/action-form";
-import { Field, SettingsFields, TutorIntro } from "@/lib/tutor/ui";
+import { Field, TutorIntro } from "@/lib/tutor/ui";
 import { isUuid } from "@/lib/tutor/validation";
 import { linkGuardian, sendClientInvitation, unlinkGuardian, updateClient } from "../actions";
 import { CopySignInLink } from "../copy-sign-in-link";
 
-export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ClientPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
+}) {
   const { id } = await params;
+  const editing = (await searchParams).edit === "1";
   if (!isUuid(id)) notFound();
   const { db } = await requireRole("tutor");
-  const { data: client, error } = await db.from("people").select("id,name,email,role,auth_user_id,settings")
+  const { data: client, error } = await db.from("people").select("id,name,email,role,auth_user_id")
     .eq("id", id).in("role", ["student", "guardian"]).maybeSingle();
   if (error) throw error;
   if (!client) notFound();
@@ -34,24 +38,42 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="stack">
-      <TutorIntro title={client.name} description={client.email} back={{ href: "/portal/tutor/clients", label: "Clients" }} />
-      <div className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
+      <TutorIntro title={client.name} description={client.email ?? undefined} back={{ href: "/portal/tutor/clients", label: "Clients" }} />
+      <div className="grid items-start gap-6 lg:grid-cols-[1.45fr_1fr]">
         <section className="panel stack">
-          <h2>Profile</h2>
-          <ActionForm action={updateClient} label="Save profile">
-            <input type="hidden" name="id" value={id} />
-            <Field name="profile-name" label="Name"><input id="profile-name" name="name" defaultValue={client.name} maxLength={120} required /></Field>
-            {isStudent && <SettingsFields prefix="profile" settings={client.settings} />}
-          </ActionForm>
+          <div className="row spread">
+            <h2>Profile</h2>
+            {!editing && <Link className="button secondary" href={`/portal/tutor/clients/${id}?edit=1`}>Edit profile</Link>}
+          </div>
+          {editing ? <>
+            <ActionForm action={updateClient} label="Save profile">
+              <input type="hidden" name="id" value={id} />
+              <Field name="profile-name" label="Name"><input id="profile-name" name="name" defaultValue={client.name} maxLength={120} required /></Field>
+              <Field name="profile-email" label="Email (optional)">
+                <input id="profile-email" name="email" type="email" defaultValue={client.email ?? ""} maxLength={254} readOnly={!!client.auth_user_id} />
+                {client.auth_user_id && <small className="muted">This email is linked to the portal account.</small>}
+              </Field>
+            </ActionForm>
+            <Link className="button secondary" href={`/portal/tutor/clients/${id}`}>Cancel</Link>
+          </> : <dl className="stack">
+            <div><dt className="muted text-sm">Name</dt><dd>{client.name}</dd></div>
+            <div><dt className="muted text-sm">Email</dt><dd className="break-all">{client.email || "No email added"}</dd></div>
+            <div><dt className="muted text-sm">Role</dt><dd className="capitalize">{client.role}</dd></div>
+          </dl>}
         </section>
         <div className="stack">
           <section className="panel stack">
             <h2>Portal access</h2>
-            <p className="muted">{client.auth_user_id ? "This client has signed in before." : "This client has yet to sign in."}</p>
-            <CopySignInLink key={id} clientId={id} />
-            <ActionForm action={sendClientInvitation} label={client.auth_user_id ? "Send sign-in link" : "Send invitation"} secondary>
-              <input type="hidden" name="id" value={id} />
-            </ActionForm>
+            {client.email ? <>
+              <p className="muted">{client.auth_user_id ? "This client has signed in before." : "This client has yet to sign in."}</p>
+              <CopySignInLink key={id} clientId={id} />
+              <ActionForm action={sendClientInvitation} label={client.auth_user_id ? "Send sign-in link" : "Send invitation"} secondary>
+                <input type="hidden" name="id" value={id} />
+              </ActionForm>
+            </> : <>
+              <p className="muted">Add an email address to give this client portal access.</p>
+              <Link className="button secondary" href={`/portal/tutor/clients/${id}?edit=1`}>Add email</Link>
+            </>}
           </section>
           <section className="panel stack">
             <h2>{isStudent ? "Linked guardians" : "Linked students"}</h2>

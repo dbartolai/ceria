@@ -1,4 +1,3 @@
-import { manualContentProvider } from '@/lib/ai/manual';
 import { questionKinds, type Question, type QuizDraft } from './types';
 
 const numericPattern = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d{1,2})?$/i;
@@ -60,26 +59,19 @@ export function parseQuizDraft(input: unknown, requireQuestions = false): QuizDr
   return { title, description, questions: draft.questions.map(parseQuestion) };
 }
 
-export function importQuiz(input: string) {
-  return manualContentProvider.parse(input, { parse: (value) => parseQuizDraft(value, true) });
+export function parseQuizJson(input: string, requireQuestions = false) {
+  const trimmed = input.trim();
+  if (trimmed.length > 900_000) throw new Error('The import is too large. Split it into smaller drafts.');
+  const json = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] ?? trimmed;
+  let draft: unknown;
+  try {
+    draft = JSON.parse(json);
+  } catch {
+    throw new Error('Paste valid quiz JSON and try again.');
+  }
+  return parseQuizDraft(draft, requireQuestions);
 }
 
-export function quizPrompt(context: string) {
-  return manualContentProvider.buildPrompt({
-    task: 'Draft a tutoring practice quiz that checks understanding of the academic topics below.',
-    context,
-    guidance: [
-      'Use question kinds "multiple-choice", "short-answer", and "numeric" as appropriate. Include a topic and an explanation of the reasoning for every question.',
-      'For multiple choice, supply two to eight distinct choices and copy the exact correct choice to answer. For other types, leave choices empty.',
-      'Use a string for every answer. Numeric answers should be decimals or scientific notation. Supply a nonnegative numeric tolerance only where rounding is appropriate. Use $...$ for inline mathematics and $$...$$ for display mathematics in prompts and explanations.',
-    ],
-    format: {
-      title: 'Linear equations',
-      description: 'Solve for the unknown.',
-      questions: [{
-        kind: 'multiple-choice', topic: 'Solving equations', prompt: 'What is $x$ if $2x = 6$?',
-        choices: ['$2$', '$3$', '$4$'], answer: '$3$', explanation: 'Divide both sides by $2$.', tolerance: 0,
-      }],
-    },
-  });
+export function importQuiz(input: string) {
+  return parseQuizJson(input, true);
 }

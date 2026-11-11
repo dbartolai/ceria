@@ -1,7 +1,7 @@
 export const defaultSettings = {
   quizzes: true,
   materials: true,
-  roadmaps: false,
+  roadmaps: true,
   parentNotifications: true,
   goals: "",
   milestones: "",
@@ -16,5 +16,8 @@ export function resolveSettings(
   student?: Partial<Settings> | null,
   enrollment?: Partial<Settings> | null,
 ): Settings {
-  return { ...defaultSettings, ...engagement, ...student, ...enrollment };
+  return {
+    ...defaultSettings, ...engagement, ...student, ...enrollment,
+    quizzes: true, materials: true, roadmaps: true, parentNotifications: true,
+  };
 }

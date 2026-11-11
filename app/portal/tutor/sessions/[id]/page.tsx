@@ -4,7 +4,6 @@ import { MathText } from "@/components/math";
 import { requireRole } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { ActionForm } from "@/lib/tutor/action-form";
-import { DraftEditor } from "@/lib/tutor/draft-editor";
 import { Field, TutorIntro } from "@/lib/tutor/ui";
 import { isUuid } from "@/lib/tutor/validation";
 import { publishRecap, saveNotes, saveRecap, unpublishRecap } from "../actions";
@@ -36,6 +35,17 @@ function NoteForm({ sessionId, studentId, notes }: { sessionId: string; studentI
   );
 }
 
+function RecapFields({ prefix, body = "", topics = "" }: { prefix: string; body?: string; topics?: string }) {
+  return <>
+    <Field name={`${prefix}-topics`} label="Topics covered">
+      <input id={`${prefix}-topics`} name="topics" defaultValue={topics} maxLength={1500} />
+    </Field>
+    <Field name={`${prefix}-body`} label="Recap">
+      <textarea id={`${prefix}-body`} name="body" rows={6} defaultValue={body} maxLength={12000} required />
+    </Field>
+  </>;
+}
+
 export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!isUuid(id)) notFound();
@@ -51,21 +61,14 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     db.from("people").select("id,name").eq("role", "student").order("name"),
     db.from("session_notes").select("student_id,topics,strengths,weaknesses,next_steps").eq("session_id", id),
     db.from("recaps").select("id,student_id,audience,topics,body,published_at").eq("session_id", id).order("published_at", { nullsFirst: true }),
-    db.from("engagements").select("settings").eq("id", engagementId).single(),
   ]);
   for (const result of results) if (result.error) throw result.error;
-  const [participants, enrollments, students, notes, recaps, engagement] = results;
+  const [participants, enrollments, students, notes, recaps] = results;
   const participantIds = participants.data?.map((row) => row.student_id) ?? [];
   const eligible = new Set(enrollments.data?.map((row) => row.student_id));
   const participantsByName = students.data?.filter((student) => participantIds.includes(student.id)) ?? [];
   const roster = students.data?.filter((student) => eligible.has(student.id) || participantIds.includes(student.id)) ?? [];
   const groupNotes = notes.data?.find((note) => !note.student_id);
-  const promptContext = [
-    "Audience: Student or guardian (choose one before copying).",
-    groupNotes?.topics && `Topics covered: ${groupNotes.topics}`,
-    groupNotes?.next_steps && `Next steps: ${groupNotes.next_steps}`,
-    engagement.data?.settings?.testPrep && `Test preparation: ${engagement.data.settings.testPrep}`,
-  ].filter(Boolean).join("\n");
 
   return (
     <div className="stack">
@@ -115,7 +118,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
                       <ActionForm action={saveRecap} label="Save recap draft" secondary>
                         <input name="id" type="hidden" value={recap.id} />
                         <input name="session_id" type="hidden" value={id} />
-                        <DraftEditor variant="recap" context={promptContext} body={recap.body} topics={recap.topics} />
+                        <RecapFields prefix={recap.id} body={recap.body} topics={recap.topics} />
                       </ActionForm>
                       <ActionForm action={publishRecap} label="Publish recap">
                         <input name="id" type="hidden" value={recap.id} />
@@ -131,19 +134,18 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
               <div className="mt-4">
                 <ActionForm action={saveRecap} label="Create recap draft">
                   <input name="session_id" type="hidden" value={id} />
-                  <DraftEditor key={recaps.data?.length ?? 0} variant="recap" context={promptContext} topics={groupNotes?.topics}>
-                    <div className="form-grid">
-                      <Field name="recap-audience" label="Audience">
-                        <select id="recap-audience" name="audience"><option value="student">Students</option><option value="guardian">Guardians</option></select>
-                      </Field>
-                      <Field name="recap-student" label="Share with">
-                        <select id="recap-student" name="student_id" defaultValue="">
-                          <option value="">Whole session</option>
-                          {participantsByName.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}
-                        </select>
-                      </Field>
-                    </div>
-                  </DraftEditor>
+                  <div className="form-grid">
+                    <Field name="recap-audience" label="Audience">
+                      <select id="recap-audience" name="audience"><option value="student">Students</option><option value="guardian">Guardians</option></select>
+                    </Field>
+                    <Field name="recap-student" label="Share with">
+                      <select id="recap-student" name="student_id" defaultValue="">
+                        <option value="">Whole session</option>
+                        {participantsByName.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                  <RecapFields prefix="new-recap" topics={groupNotes?.topics} />
                 </ActionForm>
               </div>
             </details>

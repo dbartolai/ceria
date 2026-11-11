@@ -19,7 +19,7 @@ export default async function EngagementsPage() {
   return (
     <div className="stack">
       <TutorIntro title="Engagements" description="Organize one-off lessons, ongoing tutoring, and group programs." />
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid items-start gap-6 lg:grid-cols-[1.4fr_1fr]">
         <section className="panel stack">
           <h2>All engagements</h2>
           {!engagements.data?.length && <p className="muted">Create an engagement, then add its students.</p>}

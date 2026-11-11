@@ -27,7 +27,7 @@ export function PublishForm({ quizId, requestId, engagements, initialEngagement 
         <label>
           Recipient
           <select name="recipient" required disabled={!engagement} key={engagementId} defaultValue="all">
-            <option value="all">Everyone with quizzes enabled{engagement && ` (${engagement.students.length})`}</option>
+            <option value="all">All enrolled students{engagement && ` (${engagement.students.length})`}</option>
             {engagement?.students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}
           </select>
         </label>

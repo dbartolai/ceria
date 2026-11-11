@@ -14,7 +14,7 @@ export default async function NewQuizPage({ searchParams }: { searchParams: Prom
         <h1>New quiz</h1>
         <p>Write questions, reuse a saved question, or import an editable draft.</p>
       </header>
-      <QuizEditor id={null} sessionId={lesson?.id ?? null} initial={{ title: '', description: '', questions: [] }} context={lesson?.context ?? ''} library={library} />
+      <QuizEditor id={null} sessionId={lesson?.id ?? null} initial={{ title: '', description: '', questions: [] }} library={library} />
     </div>
   );
 }

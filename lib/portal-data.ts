@@ -64,7 +64,7 @@ export type Enrollment = {
 
 export async function getEnrollments(db: SupabaseClient) {
   return rows(await db.from("engagement_students").select("settings,engagements(id,title,kind,settings)")
-    .returns<Enrollment[]>(), "engagement settings");
+    .returns<Enrollment[]>(), "engagements");
 }
 
 export function isUpcoming(session: Session, now: number) {

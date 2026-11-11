@@ -38,12 +38,12 @@ export default async function EditQuizPage({ params, searchParams }: {
         <p>Edit the draft, then publish it as practice for a student or group.</p>
         {assignments.length > 0 && <a href="#published-assignments">View published assignments</a>}
       </header>
-      <QuizEditor id={quiz.id} sessionId={lesson?.id ?? null} initial={quiz} context={lesson?.context ?? ''} library={library} />
+      <QuizEditor id={quiz.id} sessionId={lesson?.id ?? null} initial={quiz} library={library} />
       <section className="panel stack">
         <h2>Publish saved draft</h2>
         <p className="muted">Save any edits before publishing. Each assignment keeps the questions and answers from the draft at publication.</p>
         {quiz.questions.length === 0 ? <p>Add and save at least one question to publish this quiz.</p> : engagements.length === 0 ? (
-          <p>Add a student with quizzes enabled to an <Link href="/portal/tutor/engagements">engagement</Link>.</p>
+          <p>Add a student to an <Link href="/portal/tutor/engagements">engagement</Link>.</p>
         ) : (
           <PublishForm quizId={quiz.id} requestId={crypto.randomUUID()} engagements={engagements} initialEngagement={lesson?.engagementId ?? null} />
         )}

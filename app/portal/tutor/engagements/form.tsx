@@ -1,6 +1,6 @@
 import { ActionForm } from "@/lib/tutor/action-form";
-import { engagementKinds, type PortalSettings } from "@/lib/tutor/fields";
-import { Field, SettingsFields } from "@/lib/tutor/ui";
+import { engagementKinds } from "@/lib/tutor/fields";
+import { Field } from "@/lib/tutor/ui";
 import { saveEngagement } from "./actions";
 
 type Engagement = {
@@ -8,7 +8,6 @@ type Engagement = {
   title: string;
   kind: string;
   description: string;
-  settings: PortalSettings;
 };
 
 const kindLabels = { "one-off": "One-off", "short-term": "Short-term", ongoing: "Ongoing" };
@@ -28,12 +27,7 @@ export function EngagementForm({ engagement }: { engagement?: Engagement }) {
       <Field name="engagement-description" label="Description">
         <textarea id="engagement-description" name="description" rows={3} defaultValue={engagement?.description} maxLength={3000} />
       </Field>
-      {engagement && <details>
-        <summary>Engagement defaults</summary>
-        <div className="mt-4">
-          <SettingsFields prefix="engagement" settings={engagement.settings} overrides={false} />
-        </div>
-      </details>}
+
     </ActionForm>
   );
 }

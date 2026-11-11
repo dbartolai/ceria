@@ -3,8 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/auth';
-import { manualContentProvider } from '@/lib/ai/manual';
-import { parseQuizDraft } from '@/lib/quizzes/content';
+import { parseQuizJson } from '@/lib/quizzes/content';
 import type { QuizDraft } from '@/lib/quizzes/types';
 
 export type QuizActionState = { error?: string; success?: string };
@@ -13,7 +12,7 @@ export async function saveQuiz(id: string | null, sessionId: string | null, _sta
   const { db } = await requireRole('tutor');
   let draft: QuizDraft;
   try {
-    draft = manualContentProvider.parse(String(form.get('draft') ?? ''), { parse: parseQuizDraft });
+    draft = parseQuizJson(String(form.get('draft') ?? ''));
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Check the quiz fields.' };
   }

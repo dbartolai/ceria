@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
-import { textSettings, toggleSettings, type ActionResult, type PortalSettings } from "./fields";
+import type { ActionResult } from "./fields";
 
 type TutorDb = Awaited<ReturnType<typeof requireRole>>["db"];
 
@@ -61,19 +61,6 @@ export function choice<T extends string>(form: FormData, name: string, allowed: 
   const match = allowed.find((option) => option === input);
   if (!match) throw new FormError("Choose a valid option.");
   return match;
-}
-
-export function settingsFromForm(form: FormData) {
-  const settings: PortalSettings = {};
-  for (const [key] of toggleSettings) {
-    const input = value(form, key, 5);
-    if (input === "true" || input === "false") settings[key] = input === "true";
-  }
-  for (const [key] of textSettings) {
-    const input = value(form, key, 1500);
-    if (input) settings[key] = input;
-  }
-  return settings;
 }
 
 export function check(error: unknown, message: string) {

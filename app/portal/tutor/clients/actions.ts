@@ -1,14 +1,19 @@
 "use server";
 
 import { generateSignInLink, invitePerson, requireRole } from "@/lib/auth";
-import { check, choice, FormError, idField, isUuid, required, settingsFromForm, tutorAction } from "@/lib/tutor/validation";
+import { check, choice, FormError, idField, isUuid, required, tutorAction, value } from "@/lib/tutor/validation";
+
+function optionalEmail(form: FormData) {
+  const email = value(form, "email", 254).toLowerCase();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new FormError("Enter a valid email address.");
+  return email || null;
+}
 
 export async function createClient(form: FormData) {
   return tutorAction(async (db) => {
     const role = choice(form, "role", ["student", "guardian"] as const);
     const name = required(form, "name", "a name", 120);
-    const email = required(form, "email", "an email address", 254).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new FormError("Enter a valid email address.");
+    const email = optionalEmail(form);
     const { data, error } = await db.from("people").insert({ name, email, role }).select("id").single();
     check(error, error?.code === "23505" ? "A client already uses this email address." : "The client could not be created.");
     return { message: "Client created.", href: `/portal/tutor/clients/${data!.id}` };
@@ -19,10 +24,19 @@ export async function updateClient(form: FormData) {
   return tutorAction(async (db) => {
     const id = idField(form, "id");
     const name = required(form, "name", "a name", 120);
-    const { error } = await db.from("people").update({ name, settings: settingsFromForm(form) })
-      .eq("id", id).in("role", ["student", "guardian"]).select("id").single();
-    check(error, "The client could not be updated.");
-    return { message: "Client saved." };
+    const { data: current, error: lookupError } = await db.from("people").select("email,auth_user_id")
+      .eq("id", id).in("role", ["student", "guardian"]).single();
+    check(lookupError, "The client could not be loaded.");
+    const email = optionalEmail(form);
+    if (current!.auth_user_id && email !== current!.email) {
+      throw new FormError("The email address belongs to this client's portal account.");
+    }
+    const update = db.from("people").update({ name, email }).eq("id", id).in("role", ["student", "guardian"]);
+    const { error } = await (current!.auth_user_id
+      ? update.eq("auth_user_id", current!.auth_user_id)
+      : update.is("auth_user_id", null)).select("id").single();
+    check(error, error?.code === "23505" ? "A client already uses this email address." : "The client could not be updated. Refresh the profile and try again.");
+    return { message: "Client saved.", href: `/portal/tutor/clients/${id}` };
   });
 }
 
@@ -32,6 +46,7 @@ export async function sendClientInvitation(form: FormData) {
     const { data, error } = await db.from("people").select("email").eq("id", id)
       .in("role", ["student", "guardian"]).single();
     check(error, "Choose an existing client.");
+    if (!data!.email) throw new FormError("Add an email address to this client before sending a sign-in link.");
     try {
       await invitePerson(data!.email);
     } catch {
@@ -47,6 +62,7 @@ export async function createClientSignInLink(id: string): Promise<{ link: string
   const { data: client, error } = await db.from("people").select("email,auth_user_id").eq("id", id)
     .in("role", ["student", "guardian"]).maybeSingle();
   if (error || !client) return { error: "Choose an existing client." };
+  if (!client.email) return { error: "Add an email address to this client before copying a sign-in link." };
   try {
     return { link: await generateSignInLink(client.email, client.auth_user_id) };
   } catch {

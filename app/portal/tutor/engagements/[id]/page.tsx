@@ -3,27 +3,31 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { ActionForm } from "@/lib/tutor/action-form";
-import { Field, SettingsFields, TutorIntro } from "@/lib/tutor/ui";
+import { Field, TutorIntro } from "@/lib/tutor/ui";
 import { isUuid } from "@/lib/tutor/validation";
-import { addEnrollment, removeEnrollment, updateEnrollment } from "../actions";
+import { addEnrollment, removeEnrollment } from "../actions";
 import { EngagementForm } from "../form";
 
-export default async function EngagementPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EngagementPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
+}) {
   const { id } = await params;
+  const editing = (await searchParams).edit === "1";
   if (!isUuid(id)) notFound();
   const { db } = await requireRole("tutor");
   const results = await Promise.all([
-    db.from("engagements").select("id,title,kind,description,settings").eq("id", id).maybeSingle(),
-    db.from("engagement_students").select("student_id,settings").eq("engagement_id", id),
-    db.from("people").select("id,name,settings").eq("role", "student").order("name"),
+    db.from("engagements").select("id,title,kind,description").eq("id", id).maybeSingle(),
+    db.from("engagement_students").select("student_id").eq("engagement_id", id),
+    db.from("people").select("id,name").eq("role", "student").order("name"),
     db.from("sessions").select("id,title,starts_at,status").eq("engagement_id", id).order("starts_at", { ascending: false }),
   ]);
   for (const result of results) if (result.error) throw result.error;
   const [engagement, enrollment, people, sessions] = results;
   if (!engagement.data) notFound();
-  const settings = new Map(enrollment.data?.map((row) => [row.student_id, row.settings]));
-  const roster = people.data?.filter((person) => settings.has(person.id)) ?? [];
-  const candidates = people.data?.filter((person) => !settings.has(person.id)) ?? [];
+  const enrolledIds = new Set(enrollment.data?.map((row) => row.student_id));
+  const roster = people.data?.filter((person) => enrolledIds.has(person.id)) ?? [];
+  const candidates = people.data?.filter((person) => !enrolledIds.has(person.id)) ?? [];
 
   return (
     <div className="stack">
@@ -33,27 +37,19 @@ export default async function EngagementPage({ params }: { params: Promise<{ id:
           <Link href={`/portal/tutor/materials?engagement=${id}`} className="button secondary">Add learning material</Link>
         </div>
       </TutorIntro>
-      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_1fr]">
         <div className="stack">
           <section className="panel stack">
             <h2>Students</h2>
             {!roster.length && <p className="muted">Add the first student to start scheduling.</p>}
             {roster.map((student) => (
-              <details key={student.id} className="border-b border-[var(--border)] pb-3">
-                <summary>{student.name}</summary>
-                <div className="stack mt-4">
-                  <Link href={`/portal/tutor/clients/${student.id}`}>View profile</Link>
-                  <ActionForm action={updateEnrollment} label="Save student preferences">
-                    <input name="engagement_id" type="hidden" value={id} />
-                    <input name="student_id" type="hidden" value={student.id} />
-                    <SettingsFields prefix={student.id} settings={settings.get(student.id)} />
-                  </ActionForm>
-                  <ActionForm action={removeEnrollment} label="Remove from engagement" secondary>
-                    <input name="engagement_id" type="hidden" value={id} />
-                    <input name="student_id" type="hidden" value={student.id} />
-                  </ActionForm>
-                </div>
-              </details>
+              <div key={student.id} className="row spread border-b border-[var(--border)] pb-3">
+                <Link href={`/portal/tutor/clients/${student.id}`}>{student.name}</Link>
+                <ActionForm action={removeEnrollment} label="Remove from engagement" secondary>
+                  <input name="engagement_id" type="hidden" value={id} />
+                  <input name="student_id" type="hidden" value={student.id} />
+                </ActionForm>
+              </div>
             ))}
             {!!candidates.length && <ActionForm action={addEnrollment} label="Enroll student" reset>
               <input name="engagement_id" type="hidden" value={id} />
@@ -77,9 +73,19 @@ export default async function EngagementPage({ params }: { params: Promise<{ id:
             ))}
           </section>
         </div>
-        <section className="panel stack self-start">
-          <h2>Edit engagement</h2>
-          <EngagementForm engagement={engagement.data} />
+        <section className="panel stack">
+          <div className="row spread">
+            <h2>Engagement details</h2>
+            {!editing && <Link className="button secondary" href={`/portal/tutor/engagements/${id}?edit=1`}>Edit engagement</Link>}
+          </div>
+          {editing ? <>
+            <EngagementForm engagement={engagement.data} />
+            <Link className="button secondary" href={`/portal/tutor/engagements/${id}`}>Cancel</Link>
+          </> : <dl className="stack">
+            <div><dt className="muted text-sm">Title</dt><dd>{engagement.data.title}</dd></div>
+            <div><dt className="muted text-sm">Type</dt><dd className="capitalize">{engagement.data.kind}</dd></div>
+            {engagement.data.description && <div><dt className="muted text-sm">Description</dt><dd className="prose-copy">{engagement.data.description}</dd></div>}
+          </dl>}
         </section>
       </div>
     </div>

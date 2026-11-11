@@ -11,7 +11,7 @@ export type Role = "tutor" | "student" | "guardian";
 export type Person = {
   id: string;
   auth_user_id: string | null;
-  email: string;
+  email: string | null;
   name: string;
   role: Role;
   settings: Partial<Settings>;
