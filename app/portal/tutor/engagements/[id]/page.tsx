@@ -5,7 +5,7 @@ import { formatDateTime } from "@/lib/format";
 import { ActionForm } from "@/lib/tutor/action-form";
 import { Field, TutorIntro } from "@/lib/tutor/ui";
 import { isUuid } from "@/lib/tutor/validation";
-import { addEnrollment, removeEnrollment } from "../actions";
+import { deleteEngagement, addEnrollment, removeEnrollment } from "../actions";
 import { EngagementForm } from "../form";
 
 export default async function EngagementPage({ params, searchParams }: {
@@ -19,7 +19,7 @@ export default async function EngagementPage({ params, searchParams }: {
   const results = await Promise.all([
     db.from("engagements").select("id,title,kind,description").eq("id", id).maybeSingle(),
     db.from("engagement_students").select("student_id").eq("engagement_id", id),
-    db.from("people").select("id,name").eq("role", "student").order("name"),
+    db.from("people").select("id,name").eq("role", "student").is("deleted_at", null).order("name"),
     db.from("sessions").select("id,title,starts_at,status").eq("engagement_id", id).order("starts_at", { ascending: false }),
   ]);
   for (const result of results) if (result.error) throw result.error;
@@ -67,8 +67,9 @@ export default async function EngagementPage({ params, searchParams }: {
             {!sessions.data?.length && <p className="muted">No sessions scheduled yet.</p>}
             {sessions.data?.map((session) => (
               <div key={session.id}>
-                <Link href={`/portal/tutor/sessions/${session.id}`}>{session.title}</Link>
-                <p className="muted text-sm">{formatDateTime(session.starts_at)} · {session.status}</p>
+                <Link href={`/portal/tutor/sessions/${session.id}`}>{formatDateTime(session.starts_at)}</Link>
+                {session.title && <p>{session.title}</p>}
+                <p className="muted text-sm">{session.status}</p>
               </div>
             ))}
           </section>
@@ -88,6 +89,13 @@ export default async function EngagementPage({ params, searchParams }: {
           </dl>}
         </section>
       </div>
+      <section className="panel stack">
+        <h2>Delete engagement</h2>
+        <p className="muted">Permanently removes this engagement’s sessions, materials, assignments, submissions, and study plans. Client accounts and reusable quiz drafts are kept.</p>
+        <ActionForm action={deleteEngagement} label="Delete engagement" secondary confirmMessage={`Permanently delete ${engagement.data.title} and all its sessions, materials, assignments, submissions, and study plans? Client accounts will be kept.`}>
+          <input type="hidden" name="id" value={id} />
+        </ActionForm>
+      </section>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
+import { engagementLabel, tutorEngagements } from "@/lib/tutor/engagements";
 import { TutorIntro } from "@/lib/tutor/ui";
 import { MaterialForm } from "./form";
 
@@ -8,7 +9,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const { db } = await requireRole("tutor");
   const results = await Promise.all([
-    db.from("engagements").select("id,title").order("title"),
+    tutorEngagements(db).then(data => ({ data, error: null })),
     db.from("materials").select("id,title,published_at,engagement_id").order("title"),
   ]);
   for (const result of results) if (result.error) throw result.error;
@@ -21,7 +22,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
   if (selected) {
     const detail = await Promise.all([
       db.from("engagement_students").select("student_id").eq("engagement_id", selected.id),
-      db.from("people").select("id,name").eq("role", "student").order("name"),
+      db.from("people").select("id,name").eq("role", "student").is("deleted_at", null).order("name"),
       db.from("sessions").select("id,title,starts_at").eq("engagement_id", selected.id).order("starts_at", { ascending: false }),
       db.from("session_students").select("session_id,student_id").eq("engagement_id", selected.id),
     ]);
@@ -31,7 +32,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
     students = people.data?.filter((person) => enrolled.has(person.id)) ?? [];
     sessions = sessionRows.data?.map((session) => ({
       id: session.id,
-      label: `${session.title} · ${formatDateTime(session.starts_at)}`,
+      label: `${session.title ? `${session.title} · ` : ""}${formatDateTime(session.starts_at)}`,
       participants: roster.data?.filter((row) => row.session_id === session.id).map((row) => row.student_id) ?? [],
     })) ?? [];
   }
@@ -56,7 +57,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
           <h2>New material</h2>
           {selected ? <>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Link href={`/portal/tutor/engagements/${selected.id}`}>{selected.title}</Link>
+              <Link href={`/portal/tutor/engagements/${selected.id}`}>{engagementLabel(selected)}</Link>
               <Link className="muted text-sm" href="/portal/tutor/materials">Change engagement</Link>
             </div>
             <MaterialForm key={`${selected.id}-${params.session ?? ""}`} engagementId={selected.id} students={students} sessions={sessions}
@@ -66,7 +67,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
               <label htmlFor="material-engagement">Engagement</label>
               <select id="material-engagement" name="engagement" required defaultValue="">
                 <option value="" disabled>Choose an engagement</option>
-                {engagements.data.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                {engagements.data.map((item) => <option key={item.id} value={item.id}>{engagementLabel(item)}</option>)}
               </select>
               <div><button className="button secondary">Continue</button></div>
             </form>

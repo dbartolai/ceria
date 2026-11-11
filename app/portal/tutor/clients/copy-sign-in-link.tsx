@@ -5,7 +5,7 @@ import { createClientSignInLink } from "./actions";
 
 type Feedback = { message: string } | { error: string } | { link: string };
 
-export function CopySignInLink({ clientId }: { clientId: string }) {
+export function CopySignInLink({ clientId, emailLess = false }: { clientId: string; emailLess?: boolean }) {
   const [feedback, setFeedback] = useState<Feedback>();
   const [pending, startTransition] = useTransition();
 
@@ -26,7 +26,7 @@ export function CopySignInLink({ clientId }: { clientId: string }) {
       }
       try {
         await navigator.clipboard.writeText(result.link);
-        setFeedback({ message: "Sign-in link copied. Paste it into your email to this client." });
+        setFeedback({ message: "Sign-in link copied. Share it directly with this client." });
       } catch {
         setFeedback(result);
       }
@@ -36,7 +36,7 @@ export function CopySignInLink({ clientId }: { clientId: string }) {
   return (
     <div className="stack">
       <button className="button" type="button" onClick={copyLink} disabled={pending}>
-        {pending ? "Creating link…" : "Copy sign-in link"}
+        {pending ? "Creating link…" : (emailLess ? "Copy dashboard link" : "Copy sign-in link")}
       </button>
       {feedback && "message" in feedback && <p className="muted" role="status">{feedback.message}</p>}
       {feedback && "error" in feedback && <p className="notice error" role="alert">{feedback.error}</p>}

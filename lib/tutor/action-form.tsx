@@ -11,6 +11,7 @@ export function ActionForm({
   secondary = false,
   reset = false,
   disabled = false,
+  confirmMessage,
 }: {
   action: (form: FormData) => Promise<ActionResult>;
   children?: ReactNode;
@@ -18,6 +19,7 @@ export function ActionForm({
   secondary?: boolean;
   reset?: boolean;
   disabled?: boolean;
+  confirmMessage?: string;
 }) {
   const router = useRouter();
   const [result, setResult] = useState<ActionResult>();
@@ -26,6 +28,7 @@ export function ActionForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || disabled) return;
+    if (confirmMessage && !window.confirm(confirmMessage)) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     setResult(undefined);

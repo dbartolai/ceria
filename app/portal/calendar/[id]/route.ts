@@ -1,3 +1,5 @@
+import { sessionLabel } from "@/lib/sessions";
+import type { Session } from "@/lib/portal-data";
 import { requirePerson } from "@/lib/auth";
 import { isUuid } from "@/lib/tutor/validation";
 
@@ -33,7 +35,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!isUuid(id)) return new Response(null, { status: 404 });
   const { db } = await requirePerson();
   const { data: session, error } = await db.from("sessions")
-    .select("id,title,starts_at,duration_minutes,location,status").eq("id", id).maybeSingle();
+    .select("id,engagement_id,title,starts_at,duration_minutes,location,status,engagements(title)").eq("id", id).maybeSingle<Session>();
 
   if (error) return new Response("Calendar event unavailable.", { status: 503 });
   if (!session || session.status === "cancelled") return new Response(null, { status: 404 });
@@ -50,7 +52,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     `DTSTAMP:${stamp(new Date())}`,
     `DTSTART:${stamp(startsAt)}`,
     `DTEND:${stamp(endsAt)}`,
-    `SUMMARY:${text(session.title)}`,
+    `SUMMARY:${text(sessionLabel(session))}`,
     `LOCATION:${text(session.location)}`,
     "END:VEVENT",
     "END:VCALENDAR",

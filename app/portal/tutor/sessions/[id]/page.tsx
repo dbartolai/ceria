@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Session } from "@/lib/portal-data";
 import { notFound } from "next/navigation";
 import { MathText } from "@/components/math";
 import { requireRole } from "@/lib/auth";
@@ -50,7 +51,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   if (!isUuid(id)) notFound();
   const { db } = await requireRole("tutor");
-  const session = await db.from("sessions").select("id,engagement_id,title,starts_at,duration_minutes,location,status").eq("id", id).maybeSingle();
+  const session = await db.from("sessions").select("id,engagement_id,title,starts_at,duration_minutes,location,status,engagements(title)").eq("id", id).maybeSingle<Session>();
   if (session.error) throw session.error;
   if (!session.data) notFound();
 
@@ -58,7 +59,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const results = await Promise.all([
     db.from("session_students").select("student_id").eq("session_id", id),
     db.from("engagement_students").select("student_id").eq("engagement_id", engagementId),
-    db.from("people").select("id,name").eq("role", "student").order("name"),
+    db.from("people").select("id,name,deleted_at").eq("role", "student").order("name"),
     db.from("session_notes").select("student_id,topics,strengths,weaknesses,next_steps").eq("session_id", id),
     db.from("recaps").select("id,student_id,audience,topics,body,published_at").eq("session_id", id).order("published_at", { nullsFirst: true }),
   ]);
@@ -67,12 +68,12 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const participantIds = participants.data?.map((row) => row.student_id) ?? [];
   const eligible = new Set(enrollments.data?.map((row) => row.student_id));
   const participantsByName = students.data?.filter((student) => participantIds.includes(student.id)) ?? [];
-  const roster = students.data?.filter((student) => eligible.has(student.id) || participantIds.includes(student.id)) ?? [];
+  const roster = students.data?.filter((student) => (eligible.has(student.id) && !student.deleted_at) || participantIds.includes(student.id)) ?? [];
   const groupNotes = notes.data?.find((note) => !note.student_id);
 
   return (
     <div className="stack">
-      <TutorIntro title={session.data.title} description={`${formatDateTime(session.data.starts_at)} · ${session.data.duration_minutes} min · ${session.data.status}`} back={{ href: "/portal/tutor/sessions", label: "Sessions" }}>
+      <TutorIntro title={session.data.engagements?.title ?? "Session"} description={`${session.data.title ? `${session.data.title} · ` : ""}${formatDateTime(session.data.starts_at)} · ${session.data.duration_minutes} min · ${session.data.status}`} back={{ href: "/portal/tutor/sessions", label: "Sessions" }}>
         <div className="flex flex-wrap gap-2">
           <Link className="button" href={`/portal/tutor/sessions/${id}/prepare`}>Prepare session & study plan</Link>
           {session.data.status !== "cancelled" && <a className="button secondary" href={`/portal/calendar/${id}`}>Download calendar invite</a>}

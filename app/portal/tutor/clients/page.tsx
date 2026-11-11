@@ -7,7 +7,7 @@ import { createClient } from "./actions";
 export default async function ClientsPage() {
   const { db } = await requireRole("tutor");
   const { data: people, error } = await db.from("people").select("id,name,email,role,auth_user_id")
-    .in("role", ["student", "guardian"]).order("name");
+    .in("role", ["student", "guardian"]).is("deleted_at", null).order("name");
   if (error) throw error;
 
   return (

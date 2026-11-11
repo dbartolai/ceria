@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { sessionLabel } from "@/lib/sessions";
 import { requirePerson } from "@/lib/auth";
 import { getLinkedStudents, getSessions, rows } from "@/lib/portal-data";
 import { StudyPlanTasks } from "@/components/study-plan";
@@ -18,7 +19,7 @@ export default async function StudyPlansPage() {
     <header className="page-intro"><h1>Study plans</h1><p>Focused practice and next steps from your tutor.</p></header>
     {plans.length ? plans.map(plan => <article className="panel stack content-column" key={plan.id}>
       <p className="eyebrow">{person.role === "guardian" ? `${students.find(student => student.id === plan.student_id)?.name ?? "Student"} · ` : ""}
-        {sessions.find(session => session.id === plan.session_id)?.title ?? "Session study plan"}</p>
+        {sessionLabel(sessions.find(session => session.id === plan.session_id))}</p>
       <h2>{plan.title}</h2>
       {plan.summary && <div className="prose-copy"><MathText text={plan.summary} /></div>}
       <StudyPlanTasks plan={plan} canComplete={person.role === "student"} />

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { sessionLabel } from "@/lib/sessions";
 import { requireRole } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { getAssignments, getEnrollments, getRecaps, getSessions } from "@/lib/portal-data";
@@ -47,7 +48,7 @@ export default async function ProgressPage() {
       </section>
       <section className="stack content-column"><h2>Topics covered</h2>
         {topics.length > 0 ? <ul className="panel rule-list">{topics.map((recap) => <li key={recap.id}>
-          <h3>{sessions.find((session) => session.id === recap.session_id)?.title ?? "Session recap"}</h3>
+          <h3>{sessionLabel(sessions.find((session) => session.id === recap.session_id))}</h3>
           <p className="prose-copy">{recap.topics}</p>
         </li>)}</ul> : <p className="empty">Topics from approved session recaps will appear here.</p>}
       </section>

@@ -1,6 +1,8 @@
 import Link from "next/link";
+import type { TutorSessionRow } from "@/lib/sessions";
 import { requireRole } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
+import { engagementLabel, tutorEngagements } from "@/lib/tutor/engagements";
 import { TutorIntro } from "@/lib/tutor/ui";
 import { SessionForm } from "./form";
 
@@ -8,10 +10,10 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
   const { engagement } = await searchParams;
   const { db } = await requireRole("tutor");
   const results = await Promise.all([
-    db.from("engagements").select("id,title").order("title"),
-    db.from("sessions").select("id,title,starts_at,status").order("starts_at", { ascending: false }),
+    tutorEngagements(db).then(data => ({ data, error: null })),
+    db.from("sessions").select("id,title,starts_at,duration_minutes,status,engagements(title),session_students(people(name,deleted_at))").order("starts_at", { ascending: false }).returns<TutorSessionRow[]>(),
     db.from("engagement_students").select("engagement_id,student_id"),
-    db.from("people").select("id,name").eq("role", "student").order("name"),
+    db.from("people").select("id,name").eq("role", "student").is("deleted_at", null).order("name"),
   ]);
   for (const result of results) if (result.error) throw result.error;
   const [engagements, sessions, enrollments, people] = results;
@@ -26,7 +28,9 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
   function renderSessions(items: NonNullable<typeof sessions.data>) {
     return items.map((session) => (
       <li key={session.id} className="py-3">
-        <Link href={`/portal/tutor/sessions/${session.id}`}>{session.title}</Link>
+        <Link href={`/portal/tutor/sessions/${session.id}`}>{session.engagements?.title ?? "Session"}</Link>
+        {session.title && <p>{session.title}</p>}
+        <p className="muted text-sm">{session.session_students.flatMap(row => row.people && !row.people.deleted_at ? [row.people.name] : []).join(", ")}</p>
         <p className="muted text-sm">{formatDateTime(session.starts_at)} · {session.status}</p>
       </li>
     ));
@@ -48,7 +52,7 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
           <h2>Schedule a session</h2>
           {selected ? <>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Link href={`/portal/tutor/engagements/${selected.id}`}>{selected.title}</Link>
+              <Link href={`/portal/tutor/engagements/${selected.id}`}>{engagementLabel(selected)}</Link>
               <Link className="muted text-sm" href="/portal/tutor/sessions">Change engagement</Link>
             </div>
             {roster.length ? <SessionForm key={selected.id} engagementId={selected.id} roster={roster} selected={roster.map((student) => student.id)} />
@@ -58,7 +62,7 @@ export default async function SessionsPage({ searchParams }: { searchParams: Pro
               <label htmlFor="schedule-engagement">Engagement</label>
               <select id="schedule-engagement" name="engagement" defaultValue="" required>
                 <option value="" disabled>Choose an engagement</option>
-                {engagements.data.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                {engagements.data.map((item) => <option key={item.id} value={item.id}>{engagementLabel(item)}</option>)}
               </select>
               <div><button className="button secondary">Continue</button></div>
             </form>

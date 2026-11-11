@@ -23,3 +23,10 @@ export function CalendarLink({ id }: { id: string }) {
     <CalendarDays size={16} aria-hidden /> Add to calendar
   </a>;
 }
+
+export function SessionHeading({ session }: { session: Pick<Session, "title" | "engagements"> }) {
+  return <div className="session-heading">
+    <h3>{session.engagements?.title ?? "Tutoring session"}</h3>
+    {session.title && <p>{session.title}</p>}
+  </div>;
+}

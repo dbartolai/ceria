@@ -43,3 +43,16 @@ export async function removeEnrollment(form: FormData) {
     return { message: "Student removed from the engagement." };
   });
 }
+
+export async function deleteEngagement(form: FormData) {
+  return tutorAction(async db => {
+    const { data: paths, error } = await db.rpc("delete_engagement", { p_id: idField(form, "id") });
+    check(error, "The engagement could not be deleted. Refresh and try again.");
+    const files: string[] = paths ?? [];
+    for (let offset=0; offset<files.length; offset+=1000) {
+      const removed = await db.storage.from("materials").remove(files.slice(offset, offset+1000));
+      if (removed.error) console.error("Engagement deleted; file cleanup failed", removed.error.name);
+    }
+    return { message: "Engagement deleted.", href: "/portal/tutor/engagements" };
+  });
+}

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import type { TutorSessionRow } from "@/lib/sessions";
 import { ArrowRight, CalendarDays } from "lucide-react";
+import { SessionHeading } from "@/components/session-card";
 import { requireRole } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 
@@ -7,11 +9,11 @@ export default async function TutorHome() {
   const { db } = await requireRole("tutor");
   const now = new Date().toISOString();
   const results = await Promise.all([
-    db.from("sessions").select("id,title,starts_at,duration_minutes")
-      .eq("status", "scheduled").gte("starts_at", now).order("starts_at").limit(4),
-    db.from("sessions").select("id,title,starts_at")
-      .eq("status", "completed").order("starts_at", { ascending: false }).limit(4),
-    db.from("people").select("id", { count: "exact", head: true }).eq("role", "student"),
+    db.from("sessions").select("id,title,starts_at,duration_minutes,status,engagements(title),session_students(people(name,deleted_at))")
+      .eq("status", "scheduled").gte("starts_at", now).order("starts_at").limit(4).returns<TutorSessionRow[]>(),
+    db.from("sessions").select("id,title,starts_at,duration_minutes,status,engagements(title),session_students(people(name,deleted_at))")
+      .eq("status", "completed").order("starts_at", { ascending: false }).limit(4).returns<TutorSessionRow[]>(),
+    db.from("people").select("id", { count: "exact", head: true }).eq("role", "student").is("deleted_at", null),
     db.from("recaps").select("id", { count: "exact", head: true }).is("published_at", null),
   ]);
   for (const result of results) if (result.error) throw result.error;
@@ -35,14 +37,16 @@ export default async function TutorHome() {
             <h2 className="section-title">Upcoming sessions</h2>
             {next ? <div className="panel session-card stack">
               <div className="row"><CalendarDays size={17} aria-hidden /><time dateTime={next.starts_at}>{formatDateTime(next.starts_at)}</time></div>
-              <h3>{next.title}</h3>
+              <SessionHeading session={next} />
+              <p className="muted">{next.session_students.flatMap(row => row.people && !row.people.deleted_at ? [row.people.name] : []).join(", ")}</p>
               <p className="muted text-sm">{next.duration_minutes} minutes</p>
               <Link className="section-link" href={`/portal/tutor/sessions/${next.id}`}>Open session <ArrowRight size={15} aria-hidden /></Link>
             </div> : <p className="empty">No sessions on the calendar.</p>}
             {!!later.length && <ul className="rule-list mt-4">
               {later.map((session) => (
                 <li key={session.id} className="row spread">
-                  <Link href={`/portal/tutor/sessions/${session.id}`}>{session.title}</Link>
+                  <Link href={`/portal/tutor/sessions/${session.id}`}>{session.engagements?.title ?? "Session"}{session.title ? ` · ${session.title}` : ""}</Link>
+                  <span className="muted text-sm">{session.session_students.flatMap(row => row.people && !row.people.deleted_at ? [row.people.name] : []).join(", ")}</span>
                   <time className="muted text-sm" dateTime={session.starts_at}>{formatDateTime(session.starts_at)}</time>
                 </li>
               ))}
@@ -53,7 +57,8 @@ export default async function TutorHome() {
             {!completed.data?.length ? <p className="muted">Completed sessions will appear here for follow-up.</p> : <ul className="rule-list">
               {completed.data.map((session) => (
                 <li key={session.id} className="row spread">
-                  <Link href={`/portal/tutor/sessions/${session.id}`}>{session.title}</Link>
+                  <Link href={`/portal/tutor/sessions/${session.id}`}>{session.engagements?.title ?? "Session"}{session.title ? ` · ${session.title}` : ""}</Link>
+                  <span className="muted text-sm">{session.session_students.flatMap(row => row.people && !row.people.deleted_at ? [row.people.name] : []).join(", ")}</span>
                   <time className="muted text-sm" dateTime={session.starts_at}>{formatDateTime(session.starts_at)}</time>
                 </li>
               ))}

@@ -24,7 +24,7 @@ const subscribe = () => () => {};
 
 export function SessionForm({ engagementId, roster, selected, session }: {
   engagementId: string;
-  roster: PersonOption[];
+  roster: (PersonOption & { deleted_at?: string | null })[];
   selected: string[];
   session?: Session;
 }) {
@@ -51,7 +51,7 @@ export function SessionForm({ engagementId, roster, selected, session }: {
     <ActionForm action={save} label={session ? "Save session" : "Schedule session"}>
       {session && <input name="id" type="hidden" value={session.id} />}
       <input name="engagement_id" type="hidden" value={engagementId} />
-      <Field name="session-title" label="Title"><input id="session-title" name="title" defaultValue={session?.title} maxLength={120} required /></Field>
+      <Field name="session-focus" label="Focus (optional)"><input id="session-focus" name="focus" defaultValue={session?.title} maxLength={120} placeholder="Exam review" /></Field>
       <div className="form-grid">
         <Field name="session-start" label="Start date and time">
           <input id="session-start" type="datetime-local" name="local_start" key={localStart} defaultValue={localStart} aria-describedby="session-time-help" required />
@@ -73,7 +73,8 @@ export function SessionForm({ engagementId, roster, selected, session }: {
         <legend>Participants</legend>
         {roster.map((student) => (
           <label key={student.id} className="flex items-center gap-3">
-            <input name="students" type="checkbox" value={student.id} defaultChecked={selected.includes(student.id)} />{student.name}
+            <input name="students" type="checkbox" value={student.id} defaultChecked={selected.includes(student.id)} disabled={!!student.deleted_at} />
+            {student.deleted_at && selected.includes(student.id) && <input type="hidden" name="students" value={student.id} />}{student.name}{student.deleted_at ? " (deleted)" : ""}
           </label>
         ))}
       </fieldset>

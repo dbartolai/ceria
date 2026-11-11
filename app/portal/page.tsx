@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, BookOpen } from "lucide-react";
-import { CalendarLink, SessionMeta } from "@/components/session-card";
+import { CalendarLink, SessionHeading, SessionMeta } from "@/components/session-card";
 import { requirePerson } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
+import { sessionLabel } from "@/lib/sessions";
 import { dueDate } from "@/lib/quizzes/format";
 import { getAssignments, getLinkedStudents, getRecaps, getSessions, partitionSessions } from "@/lib/portal-data";
 
@@ -34,8 +35,7 @@ export default async function Portal() {
             <Link className="section-link" href="/portal/sessions">All sessions <ArrowRight size={15} aria-hidden /></Link>
           </div>
           {nextSession ? <article className="panel session-card stack">
-            {nextSession.engagements && <p className="eyebrow">{nextSession.engagements.title}</p>}
-            <h3>{nextSession.title}</h3>
+            <SessionHeading session={nextSession} />
             <SessionMeta session={nextSession} />
             <CalendarLink id={nextSession.id} />
           </article> : <p className="empty">There are no upcoming sessions on your schedule.</p>}
@@ -56,7 +56,7 @@ export default async function Portal() {
           <div className="row spread section-title"><h2 id="latest-recaps">Recent recaps</h2></div>
           {recaps.length ? <div className="panel rule-list">
             {recaps.slice(0, 3).map((recap) => <div className="row spread" key={recap.id}>
-              <div><h3>{sessions.find((session) => session.id === recap.session_id)?.title ?? "Session recap"}</h3>
+              <div><h3>{sessionLabel(sessions.find((session) => session.id === recap.session_id))}</h3>
                 <small className="muted">{formatDate(recap.published_at)}</small></div>
               <Link className="section-link" href={`/portal/sessions#recap-${recap.id}`}>Read recap <ArrowRight size={15} aria-hidden /></Link>
             </div>)}

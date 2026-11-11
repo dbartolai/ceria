@@ -16,8 +16,9 @@ export function EngagementForm({ engagement }: { engagement?: Engagement }) {
   return (
     <ActionForm action={saveEngagement} label={engagement ? "Save engagement" : "Create engagement"}>
       {engagement && <input name="id" type="hidden" value={engagement.id} />}
-      <Field name="engagement-title" label="Title">
-        <input id="engagement-title" name="title" defaultValue={engagement?.title} maxLength={120} required />
+      <Field name="engagement-title" label="Engagement name">
+        <input id="engagement-title" name="title" defaultValue={engagement?.title} maxLength={120} placeholder="Trigonometry prep" required />
+        <small className="muted">Use a subject or program name. Student names are shown separately in your workspace.</small>
       </Field>
       <Field name="engagement-kind" label="Engagement type">
         <select id="engagement-kind" name="kind" defaultValue={engagement?.kind ?? "ongoing"}>

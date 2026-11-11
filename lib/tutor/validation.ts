@@ -68,6 +68,6 @@ export function check(error: unknown, message: string) {
 }
 
 export async function requireClient(db: TutorDb, id: string, role: "student" | "guardian") {
-  const { data, error } = await db.from("people").select("id").eq("id", id).eq("role", role).maybeSingle();
+  const { data, error } = await db.from("people").select("id").eq("id", id).eq("role", role).is("deleted_at", null).maybeSingle();
   if (error || !data) throw new FormError(`Choose an existing ${role}.`);
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { CalendarLink, SessionMeta, SessionStatus } from "@/components/session-card";
+import { CalendarLink, SessionHeading, SessionMeta, SessionStatus } from "@/components/session-card";
 import { MathText } from "@/components/math";
 import { requirePerson } from "@/lib/auth";
 import { getLinkedStudents, getRecaps, getSessions, partitionSessions, rows, type LinkedStudent, type Recap, type Session } from "@/lib/portal-data";
@@ -23,10 +23,7 @@ function SessionList({ sessions, recaps, studentsBySession, linked, empty, showC
       const sessionRecaps = recaps.filter((recap) => recap.session_id === session.id);
       return <article key={session.id} className="panel stack">
         <div className="row spread align-start">
-          <div className="session-heading">
-            {session.engagements && <p className="eyebrow">{session.engagements.title}</p>}
-            <h3>{session.title}</h3>
-          </div>
+          <SessionHeading session={session} />
           <SessionStatus status={session.status} />
         </div>
         <SessionMeta session={session} />

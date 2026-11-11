@@ -21,7 +21,7 @@ export function PublishForm({ quizId, requestId, engagements, initialEngagement 
           Engagement
           <select name="engagement" required value={engagementId} onChange={(event) => setEngagementId(event.target.value)}>
             <option value="">Choose an engagement</option>
-            {engagements.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+            {engagements.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.students.map(student => student.name).join(", ")}</option>)}
           </select>
         </label>
         <label>

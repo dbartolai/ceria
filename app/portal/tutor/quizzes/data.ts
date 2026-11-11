@@ -21,7 +21,7 @@ export async function assignmentEngagements(db: SupabaseClient): Promise<Assignm
   const [engagements, enrollments, students] = await Promise.all([
     db.from('engagements').select('id,title').order('title'),
     db.from('engagement_students').select('engagement_id,student_id'),
-    db.from('people').select('id,name').eq('role', 'student').order('name'),
+    db.from('people').select('id,name').eq('role', 'student').is('deleted_at', null).order('name'),
   ]);
   if (engagements.error || enrollments.error || students.error) throw new Error('Engagements could not be loaded.');
   return engagements.data.map((engagement) => {

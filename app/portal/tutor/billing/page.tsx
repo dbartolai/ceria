@@ -60,14 +60,14 @@ export default async function BillingPage() {
   const { db } = await requireRole("tutor");
   const results = await Promise.all([
     db.from("invoices").select("id,title,student_id,amount_cents,currency,status,due_at,hosted_url").order("due_at", { ascending: false, nullsFirst: false }),
-    db.from("people").select("id,name,role").in("role", ["student", "guardian"]).order("name"),
+    db.from("people").select("id,name,role,deleted_at").in("role", ["student", "guardian"]).order("name"),
     db.from("payment_portals").select("guardian_id,hosted_url"),
   ]);
   for (const result of results) if (result.error) throw result.error;
   const [invoices, people, portals] = results;
-  const students = people.data?.filter((person) => person.role === "student") ?? [];
-  const guardians = people.data?.filter((person) => person.role === "guardian") ?? [];
-  const names = new Map(students.map((student) => [student.id, student.name]));
+  const students = people.data?.filter((person) => person.role === "student" && !person.deleted_at) ?? [];
+  const guardians = people.data?.filter((person) => person.role === "guardian" && !person.deleted_at) ?? [];
+  const names = new Map(people.data?.map((person) => [person.id, person.name]));
   const portalLinks = new Map(portals.data?.map((portal) => [portal.guardian_id, portal.hosted_url]));
 
   return (

@@ -17,7 +17,7 @@ export async function saveSession(form: FormData) {
     const { data, error } = await db.rpc("save_session", {
       p_id: id,
       p_engagement_id: engagementId,
-      p_title: required(form, "title", "a session title", 120),
+      p_title: value(form, "focus", 120),
       p_starts_at: startsAt.toISOString(),
       p_duration_minutes: duration,
       p_location: value(form, "location", 500),

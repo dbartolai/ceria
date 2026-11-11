@@ -3,11 +3,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { FormError } from "@/lib/tutor/validation";
 
 export async function sessionStudent(db: SupabaseClient, sessionId: string, studentId: string) {
-  const [session, participant] = await Promise.all([
+  const [session, participant, student] = await Promise.all([
     db.from("sessions").select("id,engagement_id,duration_minutes").eq("id", sessionId).single(),
     db.from("session_students").select("student_id").eq("session_id", sessionId).eq("student_id", studentId).single(),
+    db.from("people").select("id").eq("id", studentId).is("deleted_at", null).single(),
   ]);
-  if (session.error || participant.error) throw new FormError("Choose a student participating in this session.");
+  if (session.error || participant.error || student.error) throw new FormError("Choose a student participating in this session.");
   return session.data;
 }
 

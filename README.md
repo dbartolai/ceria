@@ -28,16 +28,24 @@ Open the [local portal](http://127.0.0.1:3100/portal). Supabase Studio runs on p
    ```
 
 2. In Supabase Studio, open **Authentication → Users** and invite that email. Open the invitation from Mailpit locally or from the tutor’s inbox on a hosted project. Confirm the link to bind the verified Auth account to the tutor profile.
-3. In ceria, use **Clients** to create students and guardians and link families. Client email is optional until portal access is needed. Each portal account has one role and one unique email. Use **Copy sign-in link** to send access yourself, or send an invitation from the portal. Users can bookmark `/portal` and request a fresh link whenever their session expires.
+3. In ceria, use **Clients** to create students and guardians and link families. Client email is optional, including for portal access. Each portal account has one role, and contact email addresses must be unique. Use **Copy dashboard link** for a client without email or **Copy sign-in link** for a client with email, then share the one-time link directly. Email invitations remain available for clients with an address. Users can bookmark `/portal` and request a fresh link whenever their session expires.
 
 ## Tutor workflow
 
-- Create an engagement, enroll its students, then schedule a session with the relevant participants. Sessions may be entered individually for recurring engagements. Download an ICS invitation to add it to a calendar or send it through a calendar app.
+- Give an engagement a subject or program name, enroll its students, then schedule a session with the relevant participants. Tutor lists show student names separately. Sessions use the engagement, optional focus, and date instead of a required title. Sessions may be entered individually for recurring engagements. Download an ICS invitation to add it to a calendar or send it through a calendar app.
 - Open **Prepare session & study plan** on a session. Select a student and materials, then generate or write a preparation. Record the student’s confidence separately from observed understanding. Draft a study plan, review its tasks and dates, save it, then publish. Students can mark tasks complete; linked guardians can view the plan. Preparation and observations remain tutor-only.
 - On the session page, record private lesson notes. Draft separate student summaries and guardian recaps, including individual versions when needed. Published recaps, materials, and assignments send in-app notifications. Linked guardians receive notifications for published guardian recaps.
 - Use **Quizzes** to write questions, reuse questions from saved drafts, or import quiz JSON. Review the draft and publish to selected students or the whole engagement. Draft changes leave published assignments and prior results intact.
-- Use **Materials** to share text, worked examples, and private files. Save a material draft, then select multiple files under **Files**. Files upload individually and can be removed while the material is a draft. Each uploaded file can be up to 4 MB. HEIC/HEIF photos up to 20 MB are converted to JPEG in the browser before upload; larger converted images are resized to fit. The original photo stays on your device.
+- Use **Materials** to share text, worked examples, and private files. Student materials are document links that open in a new tab, with inline images and PDF previews. File requests check current portal access and return private, uncached content. Save a material draft, then select multiple files under **Files**. Files upload individually and can be removed while the material is a draft. Each uploaded file can be up to 4 MB. HEIC/HEIF photos up to 20 MB are converted to JPEG in the browser before upload; larger converted images are resized to fit. The original photo stays on your device.
 - Quizzes and materials are available to all engagements. Use the parts needed for each lesson. Existing recorded goals and milestones remain in student progress alongside completed work, reviewed scores, and published topics.
+
+### Removing clients and engagements
+
+Use **Delete client** on a client profile to remove it from the directory and immediately revoke its portal identity, including existing browser sessions and Data API access. Lesson and billing history is retained. Contact email and the active Auth binding are cleared, the old Auth identity is marked revoked, guardian links are removed, and the server deletes the Auth account. If external Auth cleanup fails, database policies still deny the revoked identity access or reattachment.
+
+Use **Delete engagement** on an engagement to permanently remove its sessions, recaps, notes, materials, assigned quizzes and submissions, preparations, and study plans. Client accounts, billing records, and reusable quiz drafts are retained. Both actions require tutor access and a confirmation in the app.
+
+For email-free clients, the server uses a reserved, non-deliverable `.invalid` Auth identifier and binds the generated Auth user directly to the profile. No message is sent to that identifier. An email can be added later without changing the student’s portal identity.
 
 ### Stripe billing
 

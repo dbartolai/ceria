@@ -60,7 +60,7 @@ async function asPerson(person) {
 async function continueToPortal(page, path, expectedPath = "/portal") {
   await page.goto(path);
   await page.getByRole("button", { name: "Continue to portal" }).click();
-  await expect(page).toHaveURL((url) => url.pathname === expectedPath && !url.search);
+  await expect(page).toHaveURL((url) => url.pathname === expectedPath && !url.search, { timeout: 30_000 });
 }
 
 async function signInFixture(page, person) {
@@ -324,7 +324,7 @@ test("tutor copies one-time links for a new student and a returning guardian", a
   expect(new URL(await fallback.inputValue()).searchParams.get("type")).toBe("magiclink");
 });
 
-test("clients without email use static profiles and explicit editing", async ({ page }, testInfo) => {
+test("clients without email use static profiles and explicit editing", async ({ page, context }, testInfo) => {
   await signInFixture(page, fixture.tutor);
   await page.goto("/portal/tutor/clients");
   await page.screenshot({ path: testInfo.outputPath("client-directory.png"), fullPage: true, caret: "initial" });
@@ -335,6 +335,13 @@ test("clients without email use static profiles and explicit editing", async ({ 
   remove("people", "id", clientId);
   const profile = await checked(admin.from("people").select("email").eq("id", clientId).single(), "Read client without email");
   expect(profile.email).toBeNull();
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy dashboard link", exact: true }).click();
+  await expect(page.getByText("Sign-in link copied.", { exact: false })).toBeVisible();
+  const linked = await checked(admin.from("people").select("auth_user_id,email").eq("id", clientId).single(), "Read email-free identity");
+  expect(linked.auth_user_id).toBeTruthy();
+  expect(linked.email).toBeNull();
+  cleanup.push(() => checked(admin.auth.admin.deleteUser(linked.auth_user_id), "Clean email-free identity"));
   await expect(page.getByRole("button", { name: "Save profile" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Copy sign-in link" })).toHaveCount(0);
   await page.getByRole("link", { name: "Add email", exact: true }).click();
@@ -396,9 +403,22 @@ test("multiple material files upload separately and keep individual access priva
   try {
     await signInFixture(studentPage, student);
     await studentPage.goto("/portal/materials");
-    const links = studentPage.getByRole("link", { name: /notes-(one|two)\.txt/ });
+    const materialLink = studentPage.getByRole("link", { name: "Multi-file practice", exact: true });
+    await expect(materialLink).toHaveAttribute("target", "_blank");
+    const rowHeadings = materialLink.locator("xpath=ancestor::article").getByRole("heading");
+    const typography = await rowHeadings.evaluateAll(elements => elements.map(element => ({ size: getComputedStyle(element).fontSize, weight: getComputedStyle(element).fontWeight })));
+    expect(typography[0]).toEqual(typography[1]);
+    await studentPage.screenshot({ path: testInfo.outputPath("material-document-list.png"), fullPage: true });
+    const popup = studentPage.waitForEvent("popup");
+    await materialLink.click();
+    const documentPage = await popup;
+    await expect(documentPage.getByRole("heading", { name: "Multi-file practice", exact: true })).toBeVisible();
+    const links = documentPage.getByRole("link", { name: /notes-(one|two)\.txt/ });
     await expect(links).toHaveCount(2);
-    const download = await studentPage.request.get(await links.first().getAttribute("href"));
+    const download = await documentPage.request.get(await links.first().getAttribute("href"));
+    expect(download.headers()["content-disposition"]).toContain("inline");
+    expect(download.headers()["x-frame-options"]).toBe("SAMEORIGIN");
+    await documentPage.close();
     expect(download.status()).toBe(200);
     expect((await download.body()).length).toBe(2_500_000);
     await studentPage.screenshot({ path: testInfo.outputPath("multiple-material-files.png"), fullPage: true });
@@ -585,7 +605,8 @@ test("guardians see linked sessions, approved recaps, and hosted billing", async
   expect(await tableIds(guardianDb, "sessions", [groupSession, individualSession])).toEqual([groupSession, individualSession].sort());
   expect(await tableIds(otherGuardianDb, "sessions", [groupSession, individualSession])).toEqual([groupSession]);
   expect(await tableIds(guardianDb, "people", [student.id, peer.id, outsider.id])).toEqual([]);
-  expect(await tableIds(guardianDb, "engagements", [group.id, individual.id])).toEqual([]);
+  expect(await tableIds(guardianDb, "engagements", [group.id, individual.id])).toEqual([group.id, individual.id].sort());
+  expect(await tableIds(otherGuardianDb, "engagements", [group.id, individual.id])).toEqual([group.id]);
   const linked = await checked(guardianDb.rpc("linked_students"), "Read guardian's limited linked student directory");
   expect(linked.sort((first, second) => first.name.localeCompare(second.name))).toEqual([
     { id: outsider.id, name: outsider.name },
@@ -609,7 +630,7 @@ test("guardians see linked sessions, approved recaps, and hosted billing", async
   const calendar = await page.request.get(`/portal/calendar/${individualSession}`);
   expect(calendar.ok()).toBe(true);
   expect(calendar.headers()["content-type"]).toContain("text/calendar");
-  expect(await calendar.text()).toContain("SUMMARY:Geometry one-on-one");
+  expect(await calendar.text()).toContain("SUMMARY:Geometry review · Geometry one-on-one");
   await page.goto("/portal/tutor/clients");
   await expect(page).toHaveURL(/\/portal\/?$/);
   await page.goto("/portal/billing");
@@ -723,7 +744,7 @@ test("session preparation becomes a private, reviewed study plan with scoped com
   expect(retained.completed_at).toBeTruthy();
 });
 
-test("AI credit failures preserve drafts and HEIC photos upload as JPEG", async ({ page }, testInfo) => {
+test("AI credit failures preserve drafts and HEIC photos upload as JPEG", async ({ page, browser }, testInfo) => {
   const { tutorDb, group, student } = fixture;
   const sessionId = await saveSession(tutorDb, group, "Generation error handling", [student], new Date().toISOString());
   await signInFixture(page, fixture.tutor);
@@ -750,5 +771,154 @@ test("AI credit failures preserve drafts and HEIC photos upload as JPEG", async 
   const jpeg = new Uint8Array(await blob.arrayBuffer());
   expect([...jpeg.slice(0, 2)]).toEqual([255, 216]);
   await writeFile(testInfo.outputPath("heic-converted.jpg"), jpeg);
+  await page.getByRole("button", { name: "Publish material", exact: true }).click();
+  await expect(page.getByText("Material published.", { exact: true })).toBeVisible();
+  const viewer = await browser.newPage();
+  try {
+    await signInFixture(viewer, fixture.student);
+    await viewer.goto(`/portal/materials/${material.id}`);
+    const image = viewer.getByRole("img", { name: file.filename, exact: true });
+    await expect(image).toBeVisible();
+    await expect.poll(() => image.evaluate(element => element.naturalWidth)).toBeGreaterThan(0);
+    await viewer.screenshot({ path: testInfo.outputPath("document-viewer.png"), fullPage: true });
+  } finally { await viewer.close(); }
   await page.screenshot({ path: testInfo.outputPath("heic-upload.png"), fullPage: true });
+});
+
+test("email-free dashboard links work and deleting a client revokes existing sessions and unused links", async ({ page, context, browser }, testInfo) => {
+  const tutor = fixture.tutorDb;
+  expect((await tutor.rpc("delete_client", { p_id: fixture.tutor.id })).error).toBeTruthy();
+  const child = await insert(tutor, "people", { name: "Dashboard-only student", email: null, role: "student" });
+  remove("people", "id", child.id);
+  const engagement = await insert(tutor, "engagements", { title: "Dashboard link course", kind: "one-off" });
+  remove("engagements", "id", engagement.id);
+  await checked(tutor.from("engagement_students").insert({ engagement_id: engagement.id, student_id: child.id }), "Enroll email-free student");
+  const sessionId = await saveSession(tutor, engagement, "Exam review", [child], new Date().toISOString());
+  const invoice = await insert(tutor, "invoices", { student_id: child.id, title: "Dashboard history invoice", amount_cents: 2500, currency: "usd", status: "open", hosted_url: "https://invoice.stripe.com/i/deleted-client-fixture" });
+  remove("invoices", "id", invoice.id);
+  await checked(tutor.from("guardians").insert({ guardian_id: fixture.guardian.id, student_id: child.id }), "Link email-free student");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await signInFixture(page, fixture.tutor);
+  await page.goto(`/portal/tutor/clients/${child.id}`);
+  async function copy() {
+    await page.getByRole("button", { name: "Copy dashboard link", exact: true }).click();
+    await expect(page.getByText("Sign-in link copied.", { exact: false })).toBeVisible();
+    const link = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+    return `${link.pathname}${link.search}`;
+  }
+  const firstLink = await copy();
+  const identity = await checked(admin.from("people").select("auth_user_id,email").eq("id", child.id).single(), "Read generated dashboard identity");
+  expect(identity.email).toBeNull();
+  cleanup.push(async () => { await admin.auth.admin.deleteUser(identity.auth_user_id); });
+  const studentPage = await browser.newPage();
+  const replayPage = await browser.newPage();
+  try {
+    await continueToPortal(studentPage, firstLink);
+    await expect(studentPage.getByRole("heading", { name: "Your learning desk" })).toBeVisible();
+    await studentPage.goto("/portal/sessions");
+    await expect(studentPage.getByRole("heading", { name: "Dashboard link course", exact: true })).toBeVisible();
+    await expect(studentPage.getByText("Exam review", { exact: true })).toBeVisible();
+    await replayPage.goto(firstLink);
+    await replayPage.getByRole("button", { name: "Continue to portal" }).click();
+    await expect(replayPage).toHaveURL(/state=expired/);
+    const apiLink = new URL(await copy(), "http://127.0.0.1:3100");
+    const studentDb = createClient(apiUrl, publicKey, clientOptions);
+    await checked(studentDb.auth.verifyOtp({ type: apiLink.searchParams.get("type"), token_hash: apiLink.searchParams.get("token_hash") }), "Sign in email-free Data API client");
+    expect(await tableIds(studentDb, "sessions", [sessionId])).toEqual([sessionId]);
+    expect((await studentDb.rpc("delete_client", { p_id: fixture.tutor.id })).error).toBeTruthy();
+    const unusedLink = await copy();
+    page.once("dialog", dialog => dialog.dismiss());
+    await page.getByRole("button", { name: "Delete client", exact: true }).click();
+    await expect(page.getByRole("heading", { name: child.name, exact: true })).toBeVisible();
+    page.once("dialog", dialog => dialog.accept());
+    await page.getByRole("button", { name: "Delete client", exact: true }).click();
+    await expect(page).toHaveURL(/\/portal\/tutor\/clients$/);
+    await expect(page.getByRole("link", { name: child.name, exact: true })).toHaveCount(0);
+    const removed = await checked(admin.from("people").select("deleted_at,auth_user_id,email,revoked_auth_user_id").eq("id", child.id).single(), "Read revoked profile");
+    expect(removed).toMatchObject({ auth_user_id: null, email: null, revoked_auth_user_id: identity.auth_user_id });
+    expect(removed.deleted_at).toBeTruthy();
+    expect(await tableIds(studentDb, "sessions", [sessionId])).toEqual([]);
+    expect(await tableIds(studentDb, "people", [child.id])).toEqual([]);
+    expect((await studentDb.rpc("attach_person")).data).toBeNull();
+    await studentPage.reload();
+    await expect(studentPage).toHaveURL(/\/login(?:\?|$)/);
+    await replayPage.goto(unusedLink);
+    await replayPage.getByRole("button", { name: "Continue to portal" }).click();
+    await expect(replayPage).toHaveURL(/state=(expired|unassigned)/);
+    expect(await tableIds(tutor, "sessions", [sessionId])).toEqual([sessionId]);
+    const guardianDb = await asPerson(fixture.guardian);
+    const linked = await checked(guardianDb.rpc("linked_students"), "Read remaining guardian links");
+    expect(linked.some(person => person.id === child.id)).toBe(false);
+    expect(linked.some(person => person.id === fixture.student.id)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("client-deleted.png"), fullPage: true });
+    await page.goto("/portal/tutor/billing");
+    const history = page.locator("details").filter({ hasText: "Dashboard history invoice" });
+    await history.locator("summary").click();
+    await expect(history.getByText(child.name, { exact: false })).toBeVisible();
+    await expect(page.getByRole("option", { name: child.name, exact: true })).toHaveCount(0);
+  } finally { await studentPage.close(); await replayPage.close(); }
+});
+
+test("engagements show student names and sessions use an optional focus", async ({ page, browser }, testInfo) => {
+  await signInFixture(page, fixture.tutor);
+  await page.goto("/portal/tutor/engagements");
+  const row = page.locator("li").filter({ has: page.locator(`a[href="/portal/tutor/engagements/${fixture.group.id}"]`) });
+  await expect(row).toContainText(fixture.student.name);
+  await expect(row).toContainText(fixture.peer.name);
+  await page.screenshot({ path: testInfo.outputPath("engagement-students.png"), fullPage: true });
+  await page.goto(`/portal/tutor/sessions?engagement=${fixture.group.id}`);
+  await expect(page.getByLabel("Focus (optional)", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Title", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Start date and time", { exact: true }).fill("2027-01-15T17:00");
+  await page.getByRole("button", { name: "Schedule session", exact: true }).click();
+  await expect(page).toHaveURL(/\/portal\/tutor\/sessions\/[0-9a-f-]+$/);
+  const id = new URL(page.url()).pathname.split("/").at(-1);
+  remove("sessions", "id", id);
+  const saved = await checked(fixture.tutorDb.from("sessions").select("title").eq("id", id).single(), "Read empty focus");
+  expect(saved.title).toBe("");
+  const studentPage = await browser.newPage();
+  try {
+    await signInFixture(studentPage, fixture.student);
+    await studentPage.goto("/portal/sessions");
+    const card = studentPage.locator("article").filter({ hasText: "Jan 15, 2027" });
+    await expect(card.getByRole("heading", { name: fixture.group.title, exact: true })).toBeVisible();
+    await expect(card).not.toContainText(fixture.peer.name);
+    await studentPage.screenshot({ path: testInfo.outputPath("session-engagement-focus-date.png"), fullPage: true });
+  } finally { await studentPage.close(); }
+});
+
+test("deleting an engagement removes its lesson content while keeping clients and reusable quizzes", async ({ page }) => {
+  const tutor = fixture.tutorDb;
+  const engagement = await insert(tutor, "engagements", { title: "Delete this engagement", kind: "short-term" });
+  remove("engagements", "id", engagement.id);
+  await checked(tutor.from("engagement_students").insert({ engagement_id: engagement.id, student_id: fixture.student.id }), "Enroll deletion fixture");
+  const sessionId = await saveSession(tutor, engagement, "Final review", [fixture.student], new Date().toISOString());
+  await checked(tutor.from("session_notes").insert({ session_id: sessionId, student_id: fixture.student.id, topics: "Private notes" }), "Create deletion notes");
+  const recap = await insert(tutor, "recaps", { session_id: sessionId, student_id: fixture.student.id, audience: "student", body: "Recap" });
+  const material = await insert(tutor, "materials", { engagement_id: engagement.id, session_id: sessionId, title: "Delete this file" });
+  remove("materials", "id", material.id);
+  const path = `${engagement.id}/${randomUUID()}/delete.txt`;
+  await checked(tutor.storage.from(storageBucket).upload(path, new Blob(["Delete me"], { type: "text/plain" })), "Upload deletion file");
+  cleanup.push(async () => { await admin.storage.from(storageBucket).remove([path]); });
+  const fileId = await checked(tutor.rpc("add_material_attachment", { p_material_id: material.id, p_storage_path: path, p_filename: "delete.txt", p_size_bytes: 9 }), "Register deletion file");
+  const quiz = await insert(tutor, "quizzes", { title: "Keep reusable quiz", questions: [{ kind: "numeric", prompt: "What is 1 + 1?", choices: [], answer: "2", explanation: "One plus one is two.", tolerance: 0, topic: "Addition" }] });
+  remove("quizzes", "id", quiz.id);
+  const assignmentId = await checked(tutor.rpc("publish_quiz_assignment", { p_quiz_id: quiz.id, p_engagement_id: engagement.id, p_student_ids: [fixture.student.id], p_due_at: null }), "Assign deletion quiz");
+  remove("assignments", "id", assignmentId);
+  const studentDb = await asPerson(fixture.student);
+  const submissionId = await checked(studentDb.rpc("submit_quiz", { p_assignment_id: assignmentId, p_answers: ["2"] }), "Submit deletion quiz");
+  remove("submissions", "id", submissionId);
+  const planId = await checked(tutor.rpc("save_study_plan", { p_session_id: sessionId, p_student_id: fixture.student.id, p_title: "Remove this plan", p_summary: "", p_items: [{ id: randomUUID(), title: "A study task", details: "", source: "", estimated_minutes: null, due_date: null }] }), "Create deletion plan");
+  expect((await studentDb.rpc("delete_engagement", { p_id: engagement.id })).error).toBeTruthy();
+  await signInFixture(page, fixture.tutor);
+  await page.goto(`/portal/tutor/engagements/${engagement.id}`);
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Delete engagement", exact: true }).click();
+  await expect(page).toHaveURL(/\/portal\/tutor\/engagements$/);
+  for (const [table, id] of [["engagements",engagement.id],["sessions",sessionId],["materials",material.id],["recaps",recap.id],["assignments",assignmentId],["submissions",submissionId],["study_plans",planId],["material_attachments",fileId]]) {
+    expect(await tableIds(admin, table, [id])).toEqual([]);
+  }
+  expect((await admin.storage.from(storageBucket).download(path)).error).toBeTruthy();
+  expect(await tableIds(tutor, "people", [fixture.student.id])).toEqual([fixture.student.id]);
+  expect(await tableIds(tutor, "quizzes", [quiz.id])).toEqual([quiz.id]);
 });

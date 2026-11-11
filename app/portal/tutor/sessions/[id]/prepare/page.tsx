@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { sessionLabel } from "@/lib/sessions";
+import { formatDateTime } from "@/lib/format";
 import { requireRole } from "@/lib/auth";
 import { emptyPreparation, preparationSchema, type StudyPlan } from "@/lib/study-plans/contracts";
 import { preparationMaterials, sessionStudent } from "@/lib/study-plans/data";
@@ -15,17 +17,17 @@ export default async function PreparePage({ params, searchParams }: {
   const { id } = await params, { student: selected } = await searchParams;
   if (!isUuid(id)) notFound();
   const { db } = await requireRole("tutor");
-  const { data: session, error } = await db.from("sessions").select("id,title").eq("id", id).maybeSingle();
+  const { data: session, error } = await db.from("sessions").select("id,title,starts_at,engagements(title)").eq("id", id).maybeSingle<{ id: string; title: string; starts_at: string; engagements: { title: string } | null }>();
   if (error) throw error;
   if (!session) notFound();
   const { data: roster, error: rosterError } = await db.from("session_students").select("student_id").eq("session_id", id);
   if (rosterError) throw rosterError;
   const ids = roster.map(row => row.student_id);
   const { data: students, error: peopleError } = ids.length
-    ? await db.from("people").select("id,name").in("id", ids).order("name") : { data: [], error: null };
+    ? await db.from("people").select("id,name").in("id", ids).is("deleted_at", null).order("name") : { data: [], error: null };
   if (peopleError) throw peopleError;
   const studentId = selected ?? students?.[0]?.id;
-  if (selected && !ids.includes(selected)) notFound();
+  if (selected && !students?.some(student => student.id === selected)) notFound();
   let workspace = null;
   if (studentId) {
     const details = await sessionStudent(db, id, studentId);
@@ -42,7 +44,7 @@ export default async function PreparePage({ params, searchParams }: {
       aiReady={!!process.env.OPENAI_API_KEY} />;
   }
   return <div className="stack-lg">
-    <TutorIntro title="Prepare session" description={session.title} back={{ href: `/portal/tutor/sessions/${id}`, label: "Session" }} />
+    <TutorIntro title="Prepare session" description={`${sessionLabel(session)} · ${formatDateTime(session.starts_at)}`} back={{ href: `/portal/tutor/sessions/${id}`, label: "Session" }} />
     {students && students.length > 1 && <nav className="row flex-wrap" aria-label="Session students">
       {students.map(student => <Link className={`button ${student.id === studentId ? "" : "secondary"}`} aria-current={student.id === studentId ? "page" : undefined}
         key={student.id} href={`/portal/tutor/sessions/${id}/prepare?student=${student.id}`}>{student.name}</Link>)}
