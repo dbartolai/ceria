@@ -50,7 +50,7 @@ export async function createClientSignInLink(id: string): Promise<{ link: string
   try {
     return { link: await generateSignInLink(client.email, client.auth_user_id) };
   } catch {
-    return { error: "Ceria could not create a sign-in link. Check the Supabase Auth setup or try again shortly." };
+    return { error: "ceria could not create a sign-in link. Check the Supabase Auth setup or try again shortly." };
   }
 }
 

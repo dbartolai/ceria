@@ -426,9 +426,9 @@ enabled = true
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
 
 [auth.email.template.magic_link]
-subject = "Your Ceria sign-in link"
+subject = "Your ceria sign-in link"
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.invite]
-subject = "Your invitation to Ceria"
+subject = "Your invitation to ceria"
 content_path = "./supabase/templates/invite.html"

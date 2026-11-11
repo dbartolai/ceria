@@ -15,7 +15,7 @@ export default async function Confirm({
       <div>
         <h1>{valid ? "Open your portal" : "Request a new link"}</h1>
         <p className="muted">{valid
-          ? "Confirm your sign-in to continue to your Ceria workspace."
+          ? "Confirm your sign-in to continue to your ceria workspace."
           : "This link is incomplete. Enter your email address to request another."}</p>
       </div>
       {valid ? <form action={confirmSignIn}>

@@ -42,7 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Ceria//Tutoring//EN",
+    "PRODID:-//ceria//Tutoring//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

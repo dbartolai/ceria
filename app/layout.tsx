@@ -6,8 +6,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://ceria.io"),
-  title: { default: "Ceria", template: "%s · Ceria" },
-  description: "A private workspace for Ceria tutoring.",
+  title: { default: "ceria", template: "%s · ceria" },
+  description: "A private workspace for ceria tutoring.",
   robots: { index: false, follow: false },
 };
 

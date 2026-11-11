@@ -53,10 +53,7 @@ small { font-size: .82rem; }
 time, .numeric { font-variant-numeric: tabular-nums; }
 hr { border: 0; border-top: 1px solid var(--border); margin: .5rem 0; }
 
-.brand { display: inline-flex; align-items: center; gap: .65rem; width: fit-content; }
-.brand:hover { text-decoration: none; }
-.brand img { flex: none; object-fit: contain; }
-.brand span { color: var(--foreground); font: 650 2.6rem/.9 var(--font-serif); letter-spacing: -.045em; padding-bottom: .1em; }
+.brand { display: inline-flex; width: fit-content; }
 .eyebrow { color: var(--primary-dark); font-size: .69rem; font-weight: 750; letter-spacing: .17em; text-transform: uppercase; }
 .muted { color: var(--muted); }
 .page-intro { display: grid; gap: .4rem; margin-bottom: 1.9rem; }

@@ -91,7 +91,7 @@ export default async function BillingPage() {
           </section>
           <section className="panel stack">
             <h2>Payment method access</h2>
-            <p className="muted">Set the Stripe customer portal sign-in link for a guardian. Leave it blank to remove access from Ceria.</p>
+            <p className="muted">Set the Stripe customer portal sign-in link for a guardian. Leave it blank to remove access from ceria.</p>
             {!guardians.length && <Link href="/portal/tutor/clients">Add a guardian</Link>}
             {guardians.map((guardian) => (
               <details key={guardian.id} className="border-b border-[var(--border)] pb-3">

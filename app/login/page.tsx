@@ -24,10 +24,10 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
   const message = state && Object.hasOwn(messages, state) ? messages[state] : undefined;
   return <main className="auth-layout" id="main-content">
     <div className="auth-main">
-      <Brand wordmark />
+      <Brand />
       <div className="auth-content">
         <div className="eyebrow auth-eyebrow"><span /> Private tutoring portal</div>
-        <h1>Welcome to Ceria.</h1>
+        <h1>Welcome to ceria.</h1>
         <p className="auth-description">Your sessions, learning materials, and next steps in one place.</p>
         <form className="stack auth-form" action={sendSignInLink}>
           {message && <p className={state === "sent" ? "notice" : "notice error"} role="status">{message}</p>}

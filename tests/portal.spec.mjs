@@ -107,7 +107,7 @@ test.beforeAll(async () => {
   admin = createClient(apiUrl, adminKey, clientOptions);
 
   fixture.tutor = await checked(admin.from("people").select().eq("role", "tutor").limit(1).maybeSingle(), "Find existing local tutor")
-    ?? await createPerson("tutor", "Ceria Test Tutor");
+    ?? await createPerson("tutor", "ceria Test Tutor");
   fixture.student = await createPerson("student", "Mira Test");
   fixture.peer = await createPerson("student", "Jules Test");
   fixture.outsider = await createPerson("student", "Ana Test");

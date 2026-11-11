@@ -1,8 +1,8 @@
-# Ceria — Design System
+# ceria — Design System
 
 ## Brand Identity
 
-Ceria is a premium, personalized tutoring experience.
+ceria is a premium, personalized tutoring experience.
 
 The brand should feel intelligent, warm, elegant, approachable, and academically rigorous. It combines the sophistication of editorial design with the clarity and functionality of modern educational software.
 
@@ -112,7 +112,7 @@ Typography guidelines:
 
 Student quizzes should feel immersive and focused, showing one question at a time when appropriate.
 
-Administrative pages may be denser, but should retain Ceria's typography, colors, and restrained visual language.
+Administrative pages may be denser, but should retain ceria's typography, colors, and restrained visual language.
 
 ## Components
 
@@ -168,7 +168,7 @@ Administrative pages may be denser, but should retain Ceria's typography, colors
 
 ## Educational Content
 
-Educational materials are a defining part of Ceria's identity.
+Educational materials are a defining part of ceria's identity.
 
 ### Questions
 
@@ -276,7 +276,7 @@ A polished, trustworthy client experience.
 
 ## North Star
 
-Ceria should feel like opening a beautifully designed academic journal that happens to be interactive.
+ceria should feel like opening a beautifully designed academic journal that happens to be interactive.
 
 It should inspire confidence in parents, focus in students, and efficiency for the tutor.
 
