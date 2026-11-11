@@ -397,7 +397,7 @@ test("multiple material files upload separately and keep individual access priva
   expect(await checked(peerDb.from("material_attachments").select("id").eq("material_id", material.id), "Check peer attachment privacy")).toEqual([]);
   const { error: privateFileError } = await peerDb.storage.from(storageBucket).createSignedUrl(files[0].storage_path, 60);
   expect(privateFileError).toBeTruthy();
-  const { error: publishedRemoval } = await tutorDb.rpc("remove_material_attachment", { p_id: files[0].id });
+  const { error: publishedRemoval } = await studentDb.rpc("remove_material_attachment", { p_id: files[0].id });
   expect(publishedRemoval).toBeTruthy();
   const studentPage = await browser.newPage();
   try {
@@ -415,6 +415,7 @@ test("multiple material files upload separately and keep individual access priva
     await expect(documentPage.getByRole("heading", { name: "Multi-file practice", exact: true })).toBeVisible();
     const links = documentPage.getByRole("link", { name: /notes-(one|two)\.txt/ });
     await expect(links).toHaveCount(2);
+    await expect(documentPage.locator("iframe.document-text")).toHaveCount(2);
     const download = await documentPage.request.get(await links.first().getAttribute("href"));
     expect(download.headers()["content-disposition"]).toContain("inline");
     expect(download.headers()["x-frame-options"]).toBe("SAMEORIGIN");
@@ -921,4 +922,211 @@ test("deleting an engagement removes its lesson content while keeping clients an
   expect((await admin.storage.from(storageBucket).download(path)).error).toBeTruthy();
   expect(await tableIds(tutor, "people", [fixture.student.id])).toEqual([fixture.student.id]);
   expect(await tableIds(tutor, "quizzes", [quiz.id])).toEqual([quiz.id]);
+});
+
+test("a linked client's email can be changed or cleared while preserving their account and work", async ({ page, context, browser }) => {
+  const student = await createPerson("student", "Editable email student");
+  const originalEmail = student.email;
+  const engagement = await insert(fixture.tutorDb, "engagements", { title: "Email editing course", kind: "one-off" });
+  remove("engagements", "id", engagement.id);
+  await checked(fixture.tutorDb.from("engagement_students").insert({ engagement_id: engagement.id, student_id: student.id }), "Enroll email edit fixture");
+  const sessionId = await saveSession(fixture.tutorDb, engagement, "Preserve this lesson", [student], new Date().toISOString());
+  await signInFixture(page, fixture.tutor);
+  const profilePath = `/portal/tutor/clients/${student.id}`;
+  await page.goto(`${profilePath}?edit=1`);
+  await expect(page.getByLabel("Email (optional)", { exact: true })).toBeEditable();
+  const email = syntheticEmail("changed");
+  await page.getByLabel("Email (optional)", { exact: true }).fill(email);
+  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await expect(page).toHaveURL(url => url.pathname === profilePath && !url.search);
+  const account = await checked(admin.auth.admin.getUserById(student.auth_user_id), "Read updated Auth identity");
+  expect(account.user.email).toBe(email);
+  expect((await checked(admin.from("people").select("email,auth_user_id").eq("id", student.id).single(), "Read changed contact"))).toMatchObject({ email, auth_user_id: student.auth_user_id });
+
+  await page.goto(`${profilePath}?edit=1`);
+  await page.getByLabel("Email (optional)", { exact: true }).fill(fixture.peer.email);
+  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "already uses this email" })).toBeVisible();
+  expect((await checked(admin.auth.admin.getUserById(student.auth_user_id), "Check duplicate email leaves identity intact")).user.email).toBe(email);
+  await page.getByLabel("Email (optional)", { exact: true }).fill("");
+  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await expect(page).toHaveURL(url => url.pathname === profilePath && !url.search);
+  const cleared = await checked(admin.from("people").select("email,auth_user_id").eq("id", student.id).single(), "Read cleared contact");
+  expect(cleared).toMatchObject({ email: null, auth_user_id: student.auth_user_id });
+  expect((await checked(admin.auth.admin.getUserById(student.auth_user_id), "Read email-free Auth identity")).user.email).toBe(`${student.id}@portal.ceria.invalid`);
+  expect((await admin.auth.admin.listUsers()).data.users.some(user => user.email === originalEmail)).toBe(false);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy dashboard link", exact: true }).click();
+  await expect(page.getByText("Sign-in link copied.", { exact: false })).toBeVisible();
+  const link = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+  const studentPage = await browser.newPage();
+  try {
+    await continueToPortal(studentPage, link.pathname + link.search);
+    await studentPage.goto("/portal/sessions");
+    await expect(studentPage.getByRole("heading", { name: engagement.title, exact: true })).toBeVisible();
+    await expect(studentPage.getByText("Preserve this lesson", { exact: true })).toBeVisible();
+  } finally { await studentPage.close(); }
+  expect(await tableIds(fixture.tutorDb, "sessions", [sessionId])).toEqual([sessionId]);
+});
+
+test("materials preview Markdown and equations, link to sessions, save private student work, and delete cleanly", async ({ page, browser }, testInfo) => {
+  const { tutorDb, student, peer, outsider, guardian, group } = fixture;
+  const title = `Interactive Markdown worksheet ${randomUUID().slice(0, 6)}`;
+  const source = '# Review notes\n\nA **careful explanation** with *emphasis*, ~~old advice~~, and $x^2 + 1$.\n\n$$\n\\frac{1}{2} + \\frac{1}{2} = 1\n$$\n\n| Topic | Practice |\n| --- | --- |\n| Algebra | Factor |\n\n- First step\n- [x] Worked example\n\n> Check your reasoning.\n\n```js\nconst total = 2;\n```\n\n[Reference](https://example.com/reference)\n\nA footnote.[^note]\n\n[^note]: Review the signs.\n\n<script>window.materialInjected = true</script>\n\n[unsafe](javascript:alert(1))';
+  await signInFixture(page, fixture.tutor);
+  await page.goto(`/portal/tutor/materials?engagement=${group.id}`);
+  await page.getByLabel("Title", { exact: true }).fill(title);
+  await page.getByLabel("Material text (optional)", { exact: true }).fill(source);
+  await page.getByLabel("Interactive material", { exact: true }).check();
+  await page.getByRole("button", { name: "Create material draft", exact: true }).click();
+  await expect(page).toHaveURL(/\/portal\/tutor\/materials\/[0-9a-f-]+$/);
+  const materialId = new URL(page.url()).pathname.split("/").at(-1);
+  remove("materials", "id", materialId);
+  await page.getByLabel("Add files", { exact: true }).setInputFiles({ name: "worksheet.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64") });
+  await page.getByRole("button", { name: "Upload files", exact: true }).click();
+  await expect(page.getByText("1 file added.", { exact: true })).toBeVisible();
+  const file = await checked(tutorDb.from("material_attachments").select("id,storage_path").eq("material_id", materialId).single(), "Read worksheet file");
+  cleanup.push(async () => { await admin.storage.from(storageBucket).remove([file.storage_path]); });
+  await page.goto("/portal/tutor/materials");
+  const preview = page.getByRole("link", { name: title, exact: true });
+  await expect(preview).toHaveAttribute("target", "_blank");
+  const popupPromise = page.waitForEvent("popup");
+  await preview.click();
+  const documentPage = await popupPromise;
+  try {
+    await expect(documentPage.getByRole("heading", { name: "Review notes", exact: true })).toBeVisible();
+    await expect(documentPage.locator("strong", { hasText: "careful explanation" })).toBeVisible();
+    await expect(documentPage.getByRole("table")).toBeVisible();
+    await expect(documentPage.locator(".katex-display")).toHaveCount(1);
+    await expect(documentPage.locator("pre code")).toContainText("const total = 2;");
+    await expect(documentPage.locator(".footnotes")).toContainText("Review the signs.");
+    await expect(documentPage.locator('a[href^="javascript:"]')).toHaveCount(0);
+    expect(await documentPage.evaluate(() => window.materialInjected)).toBeUndefined();
+    await expect.poll(() => documentPage.getByRole("img", { name: "worksheet.png", exact: true }).evaluate(image => image.naturalWidth)).toBe(1);
+    await documentPage.screenshot({ path: testInfo.outputPath("tutor-document-preview.png"), fullPage: true });
+  } finally { await documentPage.close(); }
+  await page.goto(`/portal/tutor/materials/${materialId}`);
+  await page.getByRole("button", { name: "Publish material", exact: true }).click();
+  await expect(page.getByText("Material published.", { exact: true })).toBeVisible();
+  await page.getByLabel("Material text (optional)", { exact: true }).fill(source + '\n\n## Added after publishing\n\nUse $a^2+b^2=c^2$.');
+  await page.getByRole("button", { name: "Save material", exact: true }).click();
+  await expect(page.getByText("Material saved.", { exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "Session", exact: true }).selectOption(fixture.groupSession);
+  await page.getByRole("button", { name: "Link to session", exact: true }).click();
+  await expect(page.getByText("Material linked to session.", { exact: true })).toBeVisible();
+  const secondSession = await saveSession(tutorDb, group, "Independent practice", [student], new Date().toISOString());
+  await page.goto(`/portal/tutor/sessions/${secondSession}`);
+  await page.getByLabel("Existing material", { exact: true }).selectOption(materialId);
+  await page.getByRole("button", { name: "Link material", exact: true }).click();
+  await expect(page.getByRole("link", { name: title, exact: true })).toHaveAttribute("target", "_blank");
+  const [studentDb, peerDb, outsiderDb, guardianDb] = await Promise.all([asPerson(student), asPerson(peer), asPerson(outsider), asPerson(guardian)]);
+  for (const denied of [outsiderDb, guardianDb]) expect((await denied.rpc("save_material_response", { p_material_id: materialId, p_body: "forbidden" })).error).toBeTruthy();
+  expect((await studentDb.rpc("delete_material", { p_id: materialId })).error).toBeTruthy();
+  expect((await studentDb.from("material_sessions").insert({ material_id: materialId, session_id: fixture.individualSession, engagement_id: group.id })).error).toBeTruthy();
+  expect((await tutorDb.from("material_sessions").insert({ material_id: materialId, session_id: fixture.individualSession, engagement_id: group.id })).error).toBeTruthy();
+  const studentPage = await browser.newPage();
+  try {
+    await signInFixture(studentPage, student);
+    await studentPage.goto("/portal/sessions");
+    await expect(studentPage.getByRole("link", { name: title, exact: true })).toHaveCount(2);
+    await studentPage.goto(`/portal/materials/${materialId}`);
+    await expect(studentPage.getByRole("heading", { name: "Added after publishing", exact: true })).toBeVisible();
+    await studentPage.getByLabel("Answers and working", { exact: true }).fill('## My reasoning\n\nI used **factoring**: $x^2-1=(x-1)(x+1)$.');
+    await studentPage.getByRole("button", { name: "Save work", exact: true }).click();
+    await expect(studentPage.getByText("Your work is saved.", { exact: true })).toBeVisible();
+    await studentPage.reload();
+    await expect(studentPage.getByLabel("Answers and working", { exact: true })).toHaveValue(/I used \*\*factoring\*\*/);
+    await studentPage.getByText("Preview formatting", { exact: true }).click();
+    await expect(studentPage.getByRole("heading", { name: "My reasoning", exact: true })).toBeVisible();
+    await studentPage.locator("section").filter({ has: studentPage.getByRole("heading", { name: "Your work", exact: true }) })
+      .screenshot({ path: testInfo.outputPath("student-material-workspace.png") });
+  } finally { await studentPage.close(); }
+  const peerWork = "A different student's private answer";
+  await checked(peerDb.rpc("save_material_response", { p_material_id: materialId, p_body: peerWork }), "Save separate peer work");
+  const personalRows = await checked(studentDb.from("material_responses").select("student_id,body").eq("material_id", materialId), "Read only own work");
+  expect(personalRows).toHaveLength(1);
+  expect(personalRows[0].student_id).toBe(student.id);
+  expect(JSON.stringify(personalRows)).not.toContain(peerWork);
+  for (const denied of [outsiderDb, guardianDb]) expect(await checked(denied.from("material_responses").select("*").eq("material_id", materialId), "Check workspace privacy")).toEqual([]);
+  expect((await studentDb.from("material_responses").update({ student_id: peer.id }).eq("material_id", materialId)).error).toBeTruthy();
+  await checked(tutorDb.from("materials").update({ interactive: false }).eq("id", materialId), "Disable material workspace");
+  expect((await studentDb.rpc("save_material_response", { p_material_id: materialId, p_body: "should not overwrite" })).error).toBeTruthy();
+  await checked(tutorDb.from("materials").update({ interactive: true }).eq("id", materialId), "Restore interactive material");
+  await checked(tutorDb.from("materials").update({ published_at: null }).eq("id", materialId), "Pause material");
+  expect((await studentDb.rpc("save_material_response", { p_material_id: materialId, p_body: "should not overwrite" })).error).toBeTruthy();
+  await checked(tutorDb.rpc("publish_material", { p_id: materialId }), "Restore material publication");
+  await page.goto(`/portal/materials/${materialId}`);
+  await expect(page.getByRole("heading", { name: "My reasoning", exact: true })).toBeVisible();
+  await expect(page.getByText(peerWork, { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("tutor-student-work-review.png"), fullPage: true });
+  await page.goto(`/portal/tutor/materials/${materialId}`);
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Delete material", exact: true }).click();
+  await expect(page).toHaveURL(/\/portal\/tutor\/materials$/);
+  expect(await tableIds(admin, "materials", [materialId])).toEqual([]);
+  for (const table of ["material_responses", "material_sessions", "material_attachments"]) expect(await checked(admin.from(table).select("*").eq("material_id", materialId), `Check removed ${table}`)).toEqual([]);
+  expect((await admin.storage.from(storageBucket).download(file.storage_path)).error).toBeTruthy();
+});
+
+test("session material links preserve individual sharing and hide other students' work", async () => {
+  const { tutorDb, student, peer, outsider, guardian } = fixture;
+  const engagement = await insert(tutorDb, "engagements", { title: "Scoped material sessions", kind: "ongoing" });
+  remove("engagements", "id", engagement.id);
+  await checked(tutorDb.from("engagement_students").insert([student, peer].map(person => ({ engagement_id: engagement.id, student_id: person.id }))), "Enroll scoped material students");
+  const firstSession = await saveSession(tutorDb, engagement, "First student only", [student], new Date().toISOString());
+  const secondSession = await saveSession(tutorDb, engagement, "Second student only", [peer], new Date().toISOString());
+  const material = await insert(tutorDb, "materials", { engagement_id: engagement.id, session_id: firstSession, title: "Session-scoped worksheet", body: "Show your reasoning.", interactive: true });
+  remove("materials", "id", material.id);
+  await checked(tutorDb.rpc("publish_material", { p_id: material.id }), "Publish scoped material");
+  const [studentDb, peerDb, outsiderDb, guardianDb] = await Promise.all([asPerson(student), asPerson(peer), asPerson(outsider), asPerson(guardian)]);
+  expect(await tableIds(peerDb, "materials", [material.id])).toEqual([]);
+  await checked(tutorDb.from("material_sessions").insert({ material_id: material.id, session_id: secondSession, engagement_id: engagement.id }), "Link material to second student's session");
+  expect(await tableIds(peerDb, "materials", [material.id])).toEqual([material.id]);
+  for (const denied of [outsiderDb, guardianDb]) expect(await tableIds(denied, "materials", [material.id])).toEqual([]);
+  expect(await checked(studentDb.from("material_sessions").select("session_id").eq("material_id", material.id), "Hide another student's session link")).toEqual([]);
+  await checked(peerDb.rpc("save_material_response", { p_material_id: material.id, p_body: "Second student's work" }), "Save linked-session work");
+  await checked(tutorDb.from("material_sessions").delete().eq("material_id", material.id).eq("session_id", secondSession), "Remove linked session");
+  expect(await tableIds(peerDb, "materials", [material.id])).toEqual([]);
+  expect(await checked(peerDb.from("material_responses").select("*").eq("material_id", material.id), "Hide work after session unlink")).toEqual([]);
+  expect((await peerDb.rpc("save_material_response", { p_material_id: material.id, p_body: "Not permitted" })).error).toBeTruthy();
+  await checked(tutorDb.from("material_sessions").insert({ material_id: material.id, session_id: secondSession, engagement_id: engagement.id }), "Restore linked session");
+  await checked(tutorDb.from("materials").update({ student_id: student.id }).eq("id", material.id), "Restrict material to one student");
+  expect(await tableIds(peerDb, "materials", [material.id])).toEqual([]);
+  expect(await tableIds(studentDb, "materials", [material.id])).toEqual([material.id]);
+  const kept = await checked(tutorDb.from("material_responses").select("body").eq("material_id", material.id).single(), "Keep tutor access to prior work");
+  expect(kept.body).toBe("Second student's work");
+});
+
+test("quiz Markdown and equations render in the editor, student player, and answer review", async ({ page, browser }, testInfo) => {
+  const draft = { title: "Formatted quiz", description: "## Before you start\n\nUse **exact values** and $x^2$.", questions: [{ kind: "multiple-choice", prompt: "Find the **positive** value.\n\n$$\nx^2=4\n$$", topic: "Algebra", choices: ["**Two**: $2$", "*Three*: $3$"], answer: "**Two**: $2$", explanation: "### Reasoning\n\n- Take the positive root.\n\n$$\n\\sqrt{4}=2\n$$\n\n| Step | Result |\n| --- | --- |\n| Root | 2 |", tolerance: 0 }] };
+  await signInFixture(page, fixture.tutor);
+  await page.goto("/portal/tutor/quizzes/new");
+  await page.getByText("Import quiz JSON", { exact: true }).click();
+  await page.getByLabel("Paste quiz JSON").fill(JSON.stringify(draft));
+  await page.getByRole("button", { name: "Load draft", exact: true }).click();
+  await page.getByText("Preview formatted quiz", { exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Before you start", exact: true })).toBeVisible();
+  await expect(page.locator(".katex-display")).toHaveCount(2);
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page).toHaveURL(/\/portal\/tutor\/quizzes\/[0-9a-f-]+$/);
+  const quizId = new URL(page.url()).pathname.split("/").at(-1);
+  remove("quizzes", "id", quizId);
+  const assignmentId = await checked(fixture.tutorDb.rpc("publish_quiz_assignment", { p_quiz_id: quizId, p_engagement_id: fixture.group.id, p_student_ids: [fixture.student.id], p_due_at: null }), "Publish formatted quiz");
+  remove("assignments", "id", assignmentId);
+  remove("submissions", "assignment_id", assignmentId);
+  const studentPage = await browser.newPage();
+  try {
+    await signInFixture(studentPage, fixture.student);
+    await studentPage.goto(`/portal/assignments/${assignmentId}`);
+    await expect(studentPage.getByRole("heading", { name: "Before you start", exact: true })).toBeVisible();
+    await expect(studentPage.locator("#question-prompt strong")).toHaveText("positive");
+    await expect(studentPage.locator("#question-prompt .katex-display")).toHaveCount(1);
+    await studentPage.getByRole("radio").first().check();
+    await studentPage.getByRole("button", { name: "Submit quiz", exact: true }).click();
+    await expect(studentPage.getByRole("heading", { name: "Review your answers", exact: true })).toBeVisible();
+    await expect(studentPage.getByRole("heading", { name: "Reasoning", exact: true })).toBeVisible();
+    await expect(studentPage.getByRole("table")).toBeVisible();
+    await expect(studentPage.getByText("1 of 1 correct", { exact: true })).toBeVisible();
+    await studentPage.screenshot({ path: testInfo.outputPath("quiz-markdown-review.png"), fullPage: true });
+  } finally { await studentPage.close(); }
 });

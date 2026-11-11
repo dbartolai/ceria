@@ -1,6 +1,6 @@
 "use server";
 
-import { authAdmin, generateSignInLink, invitePerson, requireRole } from "@/lib/auth";
+import { authAdmin, clientAuthEmail, generateSignInLink, invitePerson, requireRole } from "@/lib/auth";
 import { check, choice, FormError, idField, isUuid, required, tutorAction, value } from "@/lib/tutor/validation";
 
 function optionalEmail(form: FormData) {
@@ -28,17 +28,33 @@ export async function updateClient(form: FormData) {
       .eq("id", id).in("role", ["student", "guardian"]).is("deleted_at", null).single();
     check(lookupError, "The client could not be loaded.");
     const email = optionalEmail(form);
-    if (current!.auth_user_id && current!.email && email !== current!.email) {
-      throw new FormError("The email address belongs to this client's portal account.");
+    if (email) {
+      const duplicate = await db.from("people").select("id").eq("email", email).neq("id", id).limit(1);
+      check(duplicate.error, "The email address could not be checked.");
+      if (duplicate.data?.length) throw new FormError("A client already uses this email address.");
     }
-    if (current!.auth_user_id && !current!.email && email) {
-      const updated = await authAdmin().auth.admin.updateUserById(current!.auth_user_id, { email, email_confirm: true });
-      check(updated.error, "The email could not be added to this portal account. Check whether another account uses it.");
+    let previousAuthEmail: string | undefined;
+    const emailChanged = email !== current!.email;
+    if (current!.auth_user_id && emailChanged) {
+      const account = await authAdmin().auth.admin.getUserById(current!.auth_user_id);
+      check(account.error, "The portal account could not be loaded.");
+      previousAuthEmail = account.data.user?.email;
+      if (!previousAuthEmail) throw new FormError("The portal account has no login identity. Refresh and try again.");
+      const updated = await authAdmin().auth.admin.updateUserById(current!.auth_user_id, { email: clientAuthEmail(id, email), email_confirm: true });
+      check(updated.error, "The email could not be changed. Check whether another account uses it.");
     }
     const update = db.from("people").update({ name, email }).eq("id", id).in("role", ["student", "guardian"]).is("deleted_at", null);
+    const expectedEmail = current!.email ? update.eq("email", current!.email) : update.is("email", null);
     const { error } = await (current!.auth_user_id
-      ? update.eq("auth_user_id", current!.auth_user_id)
-      : update.is("auth_user_id", null)).select("id").single();
+      ? expectedEmail.eq("auth_user_id", current!.auth_user_id)
+      : expectedEmail.is("auth_user_id", null)).select("id").single();
+    if (error && previousAuthEmail) {
+      const account = await authAdmin().auth.admin.getUserById(current!.auth_user_id);
+      if (account.data.user?.email === clientAuthEmail(id, email)) {
+        const restored = await authAdmin().auth.admin.updateUserById(current!.auth_user_id, { email: previousAuthEmail, email_confirm: true });
+        if (restored.error) console.error("Client email rollback failed", restored.error.code);
+      }
+    }
     check(error, error?.code === "23505" ? "A client already uses this email address." : "The client could not be updated. Refresh the profile and try again.");
     return { message: "Client saved.", href: `/portal/tutor/clients/${id}` };
   });

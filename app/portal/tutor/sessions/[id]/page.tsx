@@ -2,6 +2,9 @@ import Link from "next/link";
 import type { Session } from "@/lib/portal-data";
 import { notFound } from "next/navigation";
 import { MathText } from "@/components/math";
+import { SessionMaterials } from "@/components/session-materials";
+import { sessionMaterialLinks } from "@/lib/materials/data";
+import { linkMaterialToSession } from "../../materials/actions";
 import { requireRole } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { ActionForm } from "@/lib/tutor/action-form";
@@ -62,9 +65,13 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     db.from("people").select("id,name,deleted_at").eq("role", "student").order("name"),
     db.from("session_notes").select("student_id,topics,strengths,weaknesses,next_steps").eq("session_id", id),
     db.from("recaps").select("id,student_id,audience,topics,body,published_at").eq("session_id", id).order("published_at", { nullsFirst: true }),
+    db.from("materials").select("id,title,published_at").eq("engagement_id", engagementId).order("title"),
   ]);
   for (const result of results) if (result.error) throw result.error;
-  const [participants, enrollments, students, notes, recaps] = results;
+  const [participants, enrollments, students, notes, recaps, availableMaterials] = results;
+  const linkedMaterials = await sessionMaterialLinks(db, [id]);
+  const linkedIds = new Set(linkedMaterials.map(material => material.id));
+  const materialChoices = availableMaterials.data?.filter(material => !linkedIds.has(material.id)) ?? [];
   const participantIds = participants.data?.map((row) => row.student_id) ?? [];
   const eligible = new Set(enrollments.data?.map((row) => row.student_id));
   const participantsByName = students.data?.filter((student) => participantIds.includes(student.id)) ?? [];
@@ -81,6 +88,18 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           <Link className="button secondary" href={`/portal/tutor/materials?engagement=${engagementId}&session=${id}`}>Add learning material</Link>
         </div>
       </TutorIntro>
+      <section className="panel stack">
+        <h2>Session materials</h2>
+        <SessionMaterials materials={linkedMaterials} />
+        {materialChoices.length > 0 && <ActionForm action={linkMaterialToSession} label="Link material" secondary>
+          <input type="hidden" name="session_id" value={id} />
+          <Field name="session-material" label="Existing material"><select id="session-material" name="material_id" required defaultValue="">
+            <option value="" disabled>Choose a material</option>
+            {materialChoices.map(material => <option key={material.id} value={material.id}>{material.title}{!material.published_at && " (draft)"}</option>)}
+          </select></Field>
+        </ActionForm>}
+        <Link className="section-link" href={`/portal/tutor/materials?engagement=${engagementId}&session=${id}`}>Create material for this session</Link>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
         <div className="stack">

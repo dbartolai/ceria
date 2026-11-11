@@ -23,7 +23,7 @@
   padding: clamp(1.15rem, 5vw, 3rem);
 }
 
-.question h2:focus { outline: none; }
+.question [role=heading]:focus { outline: none; }
 
 .choices {
   display: grid;

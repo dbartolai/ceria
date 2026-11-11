@@ -50,8 +50,8 @@ export default async function ClientPage({ params, searchParams }: {
               <input type="hidden" name="id" value={id} />
               <Field name="profile-name" label="Name"><input id="profile-name" name="name" defaultValue={client.name} maxLength={120} required /></Field>
               <Field name="profile-email" label="Email (optional)">
-                <input id="profile-email" name="email" type="email" defaultValue={client.email ?? ""} maxLength={254} readOnly={!!client.auth_user_id && !!client.email} />
-                {client.auth_user_id && client.email && <small className="muted">This email is linked to the portal account.</small>}
+                <input id="profile-email" name="email" type="email" defaultValue={client.email ?? ""} maxLength={254} />
+                <small className="muted">You can change or clear the email. The client’s account and saved work are kept.</small>
               </Field>
             </ActionForm>
             <Link className="button secondary" href={`/portal/tutor/clients/${id}`}>Cancel</Link>

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MathText } from '@/components/math';
+import { Markdown } from '@/components/markdown';
 import { requireRole } from '@/lib/auth';
 import { formatDate } from '@/lib/format';
 import { dueDate, scoreLabel } from '@/lib/quizzes/format';
@@ -28,7 +28,7 @@ export default async function AssignmentPage({ params }: { params: Promise<{ id:
       <header className="page-intro">
         <Link className="muted" href="/portal/assignments">← All assignments</Link>
         <h1>{assignment.title}</h1>
-        {assignment.description && <p className="whitespace-pre-wrap"><MathText text={assignment.description} /></p>}
+        {assignment.description && <Markdown text={assignment.description} />}
         {assignment.due_at && !submission && <p className="muted">Due {dueDate(assignment.due_at)}</p>}
       </header>
       {submission ? (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState, useRef, useState } from 'react';
-import { MathText } from '@/components/math';
+import { Markdown } from '@/components/markdown';
 import type { AssignmentQuestion } from '@/lib/quizzes/types';
 import { submitQuiz } from './actions';
 import styles from './quiz.module.css';
@@ -10,7 +10,7 @@ export function QuizPlayer({ assignmentId, questions }: { assignmentId: string; 
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ''));
   const [state, action, pending] = useActionState(submitQuiz.bind(null, assignmentId), {});
-  const heading = useRef<HTMLHeadingElement>(null);
+  const heading = useRef<HTMLDivElement>(null);
   const question = questions[step];
   const isLast = step === questions.length - 1;
   const complete = answers.every((answer) => Boolean(answer.trim()));
@@ -35,14 +35,14 @@ export function QuizPlayer({ assignmentId, questions }: { assignmentId: string; 
       </div>
       <section className={`panel stack ${styles.question}`} aria-labelledby="question-prompt">
         {question.topic && <p className="eyebrow">{question.topic}</p>}
-        <h2 ref={heading} id="question-prompt" tabIndex={-1}><MathText text={question.prompt} /></h2>
+        <div ref={heading} id="question-prompt" role="heading" aria-level={2} className="quiz-prompt" tabIndex={-1}><Markdown text={question.prompt} /></div>
         {question.kind === 'multiple-choice' ? (
           <div role="radiogroup" aria-label="Choose your answer" className={styles.choices}>
             {question.choices.map((choice, index) => (
               <label className={styles.choice} key={choice}>
                 <input type="radio" name="current-choice" value={choice} checked={answers[step] === choice} onChange={() => updateAnswer(choice)} />
                 <span className={styles.choiceLetter}>{String.fromCharCode(65 + index)}.</span>
-                <MathText text={choice} />
+                <Markdown text={choice} />
               </label>
             ))}
           </div>

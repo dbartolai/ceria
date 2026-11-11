@@ -106,12 +106,16 @@ export async function invitePerson(email: string) {
   throw new Error("The invitation email could not be sent. Check your email configuration and try again.");
 }
 
+export function clientAuthEmail(clientId: string, email: string | null) {
+  return email || `${clientId}@portal.ceria.invalid`;
+}
+
 export async function generateSignInLink(email: string | null, authUserId: string | null, clientId: string) {
   const { db } = await requireRole("tutor");
   const admin = authAdmin();
   // A non-deliverable internal identifier lets Supabase authenticate a client
   // without requiring or inventing a contact email. No email is sent here.
-  let loginEmail = email || `${clientId}@portal.ceria.invalid`;
+  let loginEmail = clientAuthEmail(clientId, email);
   if (authUserId) {
     const existing = await admin.auth.admin.getUserById(authUserId);
     if (existing.error || !existing.data.user.email) throw new Error("The client's Auth account could not be loaded.");

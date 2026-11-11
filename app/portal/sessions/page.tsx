@@ -2,14 +2,17 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CalendarLink, SessionHeading, SessionMeta, SessionStatus } from "@/components/session-card";
 import { MathText } from "@/components/math";
+import { SessionMaterials } from "@/components/session-materials";
+import { sessionMaterialLinks, type SessionMaterialLink } from "@/lib/materials/data";
 import { requirePerson } from "@/lib/auth";
 import { getLinkedStudents, getRecaps, getSessions, partitionSessions, rows, type LinkedStudent, type Recap, type Session } from "@/lib/portal-data";
 
 export const metadata: Metadata = { title: "Sessions" };
 
-function SessionList({ sessions, recaps, studentsBySession, linked, empty, showCalendar = false }: {
+function SessionList({ sessions, recaps, materials, studentsBySession, linked, empty, showCalendar = false }: {
   sessions: Session[];
   recaps: Recap[];
+  materials: SessionMaterialLink[];
   studentsBySession: Map<string, string[]>;
   linked: LinkedStudent[];
   empty: string;
@@ -29,6 +32,7 @@ function SessionList({ sessions, recaps, studentsBySession, linked, empty, showC
         <SessionMeta session={session} />
         {names.length > 0 && <p className="muted">{names.join(", ")}</p>}
         {showCalendar && <CalendarLink id={session.id} />}
+        <SessionMaterials materials={materials.filter(material => material.session_id === session.id)} />
         {sessionRecaps.length > 0 && <div className="recap-list rule-list">
           {sessionRecaps.map((recap) => {
             const name = linked.find((student) => student.id === recap.student_id)?.name;
@@ -60,7 +64,8 @@ export default async function SessionsPage() {
     studentsBySession.set(row.session_id, students);
   }
   const { upcoming, previous } = partitionSessions(sessions);
-  const props = { recaps, linked, studentsBySession };
+  const materials = guardian ? [] : await sessionMaterialLinks(db, sessions.map(session => session.id));
+  const props = { recaps, materials, linked, studentsBySession };
   return <>
     <header className="page-intro"><h1>Sessions</h1><p>Upcoming tutoring sessions and approved lesson recaps.</p></header>
     <div className="stack-lg content-column">

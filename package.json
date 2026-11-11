@@ -25,7 +25,14 @@
     "openai": "7.55.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
+    "rehype-katex": "7.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0",
     "zod": "4.6.7"
+  },
+  "overrides": {
+    "katex": "$katex"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",

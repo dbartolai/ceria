@@ -14,9 +14,9 @@ export async function sessionStudent(db: SupabaseClient, sessionId: string, stud
 
 export async function preparationMaterials(db: SupabaseClient, engagementId: string, sessionId: string, studentId: string) {
   const { data, error } = await db.from("materials")
-    .select("id,title,body,student_id,session_id,material_attachments(id,filename,storage_path,size_bytes)")
+    .select("id,title,body,student_id,session_id,material_attachments(id,filename,storage_path,size_bytes),material_sessions(session_id)")
     .eq("engagement_id", engagementId).order("title");
   if (error) throw new FormError("The session materials could not be loaded.");
   return data.filter(material => (!material.student_id || material.student_id === studentId)
-    && (!material.session_id || material.session_id === sessionId));
+    && (!material.session_id || material.session_id === sessionId || material.material_sessions.some(link => link.session_id === sessionId)));
 }

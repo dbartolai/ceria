@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { Markdown } from '@/components/markdown';
 import { importQuiz } from '@/lib/quizzes/content';
 import { questionKinds, questionLabels, type Question, type QuestionKind, type QuizDraft } from '@/lib/quizzes/types';
 import { saveQuiz } from './actions';
@@ -87,11 +88,21 @@ export function QuizEditor({ id, sessionId, initial, library }: {
         </div>
       </details>
       <form className="stack" action={action}>
+        <p className="muted text-sm">Instructions, prompts, choices, answers, and explanations support Markdown. Use $x^2$ for inline math or $$x^2$$ on separate lines for display equations.</p>
         <input name="draft" type="hidden" value={JSON.stringify(draft)} />
         <section className="panel stack">
           <label>Quiz title<input required maxLength={160} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>Instructions <span className="muted">(optional)</span><textarea rows={3} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
         </section>
+        <details className="panel stack"><summary>Preview formatted quiz</summary>
+          {description && <Markdown text={description} />}
+          {questions.map((question, index) => <article key={question.editorId} className="stack border-t border-[var(--border)] pt-4">
+            <h3>Question {index + 1}</h3><Markdown text={question.prompt} />
+            {question.choices.map((choice, position) => <div className="row" key={position}><span>{String.fromCharCode(65 + position)}.</span><Markdown text={choice} /></div>)}
+            <div><strong>Correct answer</strong><Markdown text={question.answer} /></div>
+            <div><strong>Explanation</strong><Markdown text={question.explanation} /></div>
+          </article>)}
+        </details>
         {questions.map((question, index) => (
           <fieldset className="panel stack" key={question.editorId}>
             <legend className="eyebrow">Question {index + 1}</legend>
