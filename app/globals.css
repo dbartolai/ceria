@@ -53,8 +53,9 @@ small { font-size: .82rem; }
 time, .numeric { font-variant-numeric: tabular-nums; }
 hr { border: 0; border-top: 1px solid var(--border); margin: .5rem 0; }
 
-.brand { display: inline-flex; align-items: center; gap: .65rem; width: fit-content; color: var(--primary-dark); }
+.brand { display: inline-flex; align-items: center; gap: .65rem; width: fit-content; }
 .brand:hover { text-decoration: none; }
+.brand img { flex: none; object-fit: contain; }
 .brand span { color: var(--foreground); font: 650 2.6rem/.9 var(--font-serif); letter-spacing: -.045em; padding-bottom: .1em; }
 .eyebrow { color: var(--primary-dark); font-size: .69rem; font-weight: 750; letter-spacing: .17em; text-transform: uppercase; }
 .muted { color: var(--muted); }
@@ -131,8 +132,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .auth-form input { min-height: 3rem; }
 .auth-button { width: 100%; justify-content: space-between; min-height: 3rem; }
 .auth-footnote { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .82rem; margin-top: 1.25rem; }
-.auth-art { display: grid; place-items: center; background: #e8f0ea; border-left: 1px solid #d7e3d9; padding: 2rem; }
-.study-figure { width: min(100%, 36rem); height: auto; }
+.auth-art { position: relative; overflow: hidden; background: #fbf7ee; border-left: 1px solid var(--border); }
+.auth-art img { object-fit: cover; object-position: center; }
 .confirm-wrap { width: min(calc(100% - 2rem), 37rem); margin: 0 auto; padding: 3rem 0; display: grid; gap: 2rem; }
 .confirm-wrap h1 { font-size: clamp(2.65rem, 6vw, 3.8rem); margin-bottom: .6rem; }
 
@@ -162,10 +163,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .section-link { display: inline-flex; align-items: center; gap: .35rem; font-size: .87rem; font-weight: 650; }
 
 @media (max-width: 780px) {
-  .auth-layout { grid-template-columns: 1fr; }
-  .auth-main { min-height: 100svh; }
-  .auth-content { padding: 3.6rem 0; }
-  .auth-art { display: none; }
+  .auth-layout { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  .auth-main { min-height: 0; }
+  .auth-content { padding: 3.2rem 0; }
+  .auth-art { min-height: clamp(9rem, 38vw, 14rem); border: 0; border-top: 1px solid var(--border); }
+  .auth-art img { object-position: center 46%; }
   .portal-grid.tutor { display: block; }
   .tutor .portal-nav { position: static; flex-direction: row; padding: .65rem 0; border-bottom: 1px solid var(--border); }
   .dashboard-columns { grid-template-columns: 1fr; }

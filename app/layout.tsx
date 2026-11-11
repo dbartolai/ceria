@@ -5,6 +5,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://ceria.io"),
   title: { default: "Ceria", template: "%s · Ceria" },
   description: "A private workspace for Ceria tutoring.",
   robots: { index: false, follow: false },
